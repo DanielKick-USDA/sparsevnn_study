@@ -1,0 +1,24 @@
+Bootstrap: docker 
+#From: pytorch/pytorch:2.4.1-cuda12.4-cudnn9-runtime
+From: pytorch/pytorch:2.4.1-cuda12.4-cudnn9-devel
+
+%files
+    /home/kickd/Documents/vnnpaper_containers/sparsevnn /home/jovyan/sparsevnn
+
+%environment
+
+%post
+    pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu124
+    pip install torch-scatter torch-sparse -f https://data.pyg.org/whl/torch-2.4.0+${CUDA}.html
+    pip3 install ax-platform
+    pip install graphviz
+
+    pip3 install lightning
+    pip3 install einops
+    pip3 install pandas
+    pip3 install pyarrow
+    pip3 install graphviz
+    pip3 install plotly
+    pip3 install kaleido
+    
+    pip3 install /home/jovyan/sparsevnn

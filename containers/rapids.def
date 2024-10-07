@@ -1,0 +1,10 @@
+Bootstrap: docker 
+From: nvcr.io/nvidia/rapidsai/base:24.08-cuda12.5-py3.11
+
+%files
+
+%environment
+
+%post
+    pip3 install pyarrow
+    
