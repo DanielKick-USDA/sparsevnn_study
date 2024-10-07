@@ -106,8 +106,8 @@ if not os.path.exists('./SNPtable_AB_RILs_inferred_Release4Conv6_hzg.hmp.txt.par
 
     # constrain to only the phenotypes with genotypic data
     mask = phno.RIL.isin( [int(e) for e in uniq_rils if e not in list(table)] )
-    phno = phno.loc[~mask, ['RIL', 'AdjADHSlope'] ].reset_index(drop = True)
-    phno.to_csv('./ADHReplicates_hzg.csv')
+    phno = phno.loc[~mask, ['RIL', 'AdjADHSlope'] ].reset_index(drop = True).rename(columns={'RIL':'Taxa'})
+    phno.to_csv('./ADHReplicates_hzg.csv', index=False)
 
 
 
