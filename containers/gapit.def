@@ -1,0 +1,18 @@
+Bootstrap: docker
+From: rocker/r-ver 
+Stage: build
+%files
+%environment
+%post
+    apt-get update
+    Rscript -e 'install.packages("devtools")'
+    Rscript -e 'devtools::install_github("jiabowang/GAPIT", force=TRUE)'
+    Rscript -e 'install.packages("tidyverse")'
+%runscript
+%startscript
+%labels
+    # adds metadata
+    Author Daniel.Kick@usda.go
+    Version v0.0.1
+%help
+   This is a test container.

@@ -3,7 +3,9 @@ Bootstrap: docker
 From: pytorch/pytorch:2.4.1-cuda12.4-cudnn9-devel
 
 %files
-    /home/kickd/Documents/vnnpaper_containers/sparsevnn /home/jovyan/sparsevnn
+    #/home/kickd/Documents/vnnpaper_containers/sparsevnn /home/jovyan/sparsevnn
+    /home/kickd/Documents/sparsevnn /home/jovyan/sparsevnn
+    #/home/kickd/Documents/sparsevnn_study/containers/sparsevnn /home/jovyan/sparsevnn
 
 %environment
 
@@ -21,4 +23,4 @@ From: pytorch/pytorch:2.4.1-cuda12.4-cudnn9-devel
     pip3 install plotly
     pip3 install kaleido
     
-    pip3 install /home/jovyan/sparsevnn
+    pip3 install -e /home/jovyan/sparsevnn

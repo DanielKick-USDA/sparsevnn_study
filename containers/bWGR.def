@@ -1,0 +1,19 @@
+Bootstrap: docker
+From: rocker/r-ver 
+Stage: build
+%files
+%environment
+%post
+    apt-get update
+    Rscript -e 'install.packages("devtools")'
+    Rscript -e 'install.packages("tidyverse")'
+    Rscript -e 'install.packages("vroom")'
+    Rscript -e 'install.packages("bWGR")'
+%runscript
+%startscript
+%labels
+    # adds metadata
+    Author Daniel.Kick@usda.go
+    Version v0.0.1
+%help
+   This is a test container.
