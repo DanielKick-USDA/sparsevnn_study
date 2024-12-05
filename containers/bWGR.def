@@ -9,6 +9,9 @@ Stage: build
     Rscript -e 'install.packages("tidyverse")'
     Rscript -e 'install.packages("vroom")'
     Rscript -e 'install.packages("bWGR")'
+    Rscript -e 'install.packages("devtools")'
+    Rscript -e 'devtools::install_github("jiabowang/GAPIT", force=TRUE)'
+    Rscript -e 'install.packages("arrow")'
 %runscript
 %startscript
 %labels
