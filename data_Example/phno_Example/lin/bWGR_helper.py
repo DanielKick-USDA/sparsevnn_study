@@ -9,7 +9,7 @@ o  = [o[i] for i in range(len(o)) if oc[i] > min(oc)]
 o = [e.split('_')[0] for e in o]
 # convert into commands
 o = [' '.join([
-'singularity exec ../../../containers/new.sif Rscript bWGR_cli.R',
+'singularity exec ../../../containers/bWGR.sif Rscript bWGR_cli.R',
 f"--hash {e}",
 '--inp_dir ../dnn/vnn_cache',
 '--out_dir ./models/blup/',
