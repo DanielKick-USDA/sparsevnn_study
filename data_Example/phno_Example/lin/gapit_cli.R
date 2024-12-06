@@ -207,3 +207,13 @@ myGAPIT <- GAPIT(
 		 PCA.total=3,
 		 model="BLINK"
 		 )
+
+# I don't think GAPIT has an option to set an output directory. We'll move everything instead.
+mv_files <- list.files()
+mv_files <- mv_files[stringr::str_starts(mv_files, 'GAPIT.')]
+for(mv_file in mv_files){
+    cp_status <- file.copy(paste0('./', mv_file), paste0(out_dir, mv_file))
+    if(cp_status){
+        unlink(paste0('./', mv_file))        
+    }
+}
