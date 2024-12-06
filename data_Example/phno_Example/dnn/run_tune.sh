@@ -6,6 +6,7 @@ hmp_path="$shared_data"'Example.hmp.txt'
 phno_path="$shared_data""$phno"'.csv'
 kmeans_path="$shared_data"'KMeans_taxa_holdouts.json'
 
+tune_trials=4
 tune_max=4
 tune_max_epoch=4
 
@@ -37,6 +38,6 @@ singularity exec --nv $sparsevnn_path python editholdouts.py \
 # # date
 singularity exec --nv $sparsevnn_path python dnn.py \
     --run_mode tune         \
-    --tune_trials $tune_max \
+    --tune_trials $tune_trials \
     --tune_max $tune_max    \
     --max_epoch $tune_max_epoch  
