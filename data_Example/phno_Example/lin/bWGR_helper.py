@@ -13,7 +13,7 @@ o = [' '.join([
 f"--hash {e}",
 '--inp_dir ../dnn/vnn_cache',
 '--out_dir ./models/blup/',
-'--max_int 1000'
+'--max_inps 1000'
 ]) for e in o]
 
 with open('./tmp_bWGR.sh', 'w') as f:
