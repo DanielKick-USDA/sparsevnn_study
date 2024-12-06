@@ -1,18 +1,38 @@
 Bootstrap: docker
-From: rocker/r-ver 
+From: rocker/r-ver:4.4.1 
 Stage: build
 
 %files
+  GAPIT_3.4.0.tar.gz /app/GAPIT_3.4.0.tar.gz
+  multtest_2.8.0.tar.gz /app/multtest_2.8.0.tar.gz
 
 %environment
 
 %post
     apt-get update
+    # dependencies for GAPIT
+    Rscript -e 'install.packages("ape")'
+    Rscript -e 'install.packages("bigmemory")' 
+    Rscript -e 'install.packages("EMMREML")' 
+    Rscript -e 'install.packages("genetics")' 
+    Rscript -e 'install.packages("gplots")' 
+    Rscript -e 'install.packages("lme4")' 
+    # multtest is no longer on cran
+    Rscript -e 'install.packages("BiocManager")'
+    Rscript -e 'BiocManager::install("Biobase")'
+    #Rscript -e 'install.packages("multtest")' 
+    R CMD INSTALL /app/multtest_2.8.0.tar.gz
+    Rscript -e 'install.packages("plotly")' 
+    Rscript -e 'install.packages("RcppArmadillo")' 
+    Rscript -e 'install.packages("rgl")' 
+    Rscript -e 'install.packages("scatterplot3d")' 
+    Rscript -e 'install.packages("snowfall")' 
+    R CMD INSTALL /app/GAPIT_3.4.0.tar.gz 
+
     Rscript -e 'install.packages("devtools")'
     Rscript -e 'install.packages("arrow")'
-    Rscript -e 'devtools::install_github("jiabowang/GAPIT", force=TRUE)'
+    #Rscript -e 'devtools::install_github("jiabowang/GAPIT", force=TRUE)'
     Rscript -e 'install.packages("tidyverse")'
-
 
 %runscript
 
