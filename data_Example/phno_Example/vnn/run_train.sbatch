@@ -8,7 +8,7 @@
 #SBATCH --mail-type=END,FAIL
 #SBATCH --time=02:00:00
 #SBATCH --nodes=1
-#SBATCH --ntasks-per-node=48
+#SBATCH --cpus-per-task=48
 
 module load apptainer
 bash ./run_train.sh
