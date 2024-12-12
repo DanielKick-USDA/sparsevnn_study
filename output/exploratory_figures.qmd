@@ -1,0 +1,295 @@
+---
+title: "Untitled"
+format: html
+editor: source
+---
+
+<!-- x = system('ls', intern = TRUE) -->
+
+```{r}
+setwd("~/daniel/sparsevnn_study/output")
+
+
+library(arrow)
+library(tidyverse)
+library(viridis)
+library(patchwork)
+library('ggh4x')
+library(ggthemes)
+```
+
+
+
+```{r hyps vis 1}
+# Hyperparameters ---
+
+
+plt_hyps_grid_vnn <- function(
+    M, 
+    hyps_cols = c(
+  "train_loss", 
+  "default_out_nodes_inp", "default_out_nodes_edge", 
+  "default_drop_nodes_inp", "default_drop_nodes_edge", "default_drop_nodes_out", 
+  "default_reps_nodes_inp", "default_reps_nodes_edge", "default_reps_nodes_out", 
+  "default_decay_rate"#, "default_out_nodes_out"
+  )
+    ){
+  plt <- M |>
+    pivot_longer(cols = all_of(hyps_cols)) |>
+    group_by(exp, phn, model, name) |>
+    # set scaling col
+    mutate(pr_max = (value - min(value))/(max(value) - min(value)) ) |>
+    ungroup() |>
+    # do fussy things with the name column so that the hyperparameters can be grouped
+    mutate(
+      node_type = case_when(
+        str_detect(name, 'nodes_inp') ~ 'Input',
+        str_detect(name, 'nodes_edge') ~ 'Edge',
+        str_detect(name, 'nodes_out') ~ 'Output',
+        
+        str_detect(name, 'train_loss') ~ 'Loss',
+        TRUE ~ 'All'
+      ),
+      node_attr = case_when(
+        str_detect(name, 'reps')  ~ 'Repeats',
+        str_detect(name, '_out_') ~ 'Output',
+        str_detect(name, 'drop')  ~ 'Dropout',
+        str_detect(name, 'decay') ~ 'Decay',
+        
+        str_detect(name, 'train_loss') ~ ''
+      )
+    )|> 
+    mutate(
+      node_type = factor(node_type, levels = c('Output', 'Edge', 'Input', 'All', 'Loss')),
+      node_attr = factor(node_attr, levels = c('Decay', 'Dropout', 'Repeats', 'Output', ''))
+    ) |>
+    
+    ggplot(aes(x = trial_index, y = interaction(node_type, node_attr), fill = 100*pr_max))+
+    geom_tile()+
+    scale_y_discrete(guide = "axis_nested")+
+    labs(x = 'Hyperparameter Set', y = '', title = 'Iterative Improvement of Hyperparameters', fill = '% Max')+
+    theme(panel.background = element_rect(fill = "white", colour = NA),
+          axis.ticks = element_line(colour = 'gray'))
+  
+  return(plt)
+  
+}
+
+
+plt_hyps_grid_dnn <- function(
+    M, 
+    hyps_cols = c(
+  "train_loss", 
+  "hidden_layers", "width", "drop", 
+  "width_decay_rate", "drop_decay_rate", 
+  "width_decay_reverse", "drop_decay_reverse"#, 
+  # "size_out",
+  # "size_in"
+  )
+    ){
+  plt <- M |>
+    pivot_longer(cols = all_of(hyps_cols)) |>
+    filter(!(name %in% c("size_out", "size_in"))) |>
+    group_by(exp, phn, model, name) |>
+    # set scaling col
+    mutate(pr_max = (value - min(value))/(max(value) - min(value)) ) |>
+    ungroup() |>
+    # do fussy things with the name column so that the hyperparameters can be grouped
+    mutate(
+      node_type = case_when(
+        str_detect(name, 'hidden_layers') ~ 'Depth',
+        str_detect(name, 'width') ~ 'Width',
+        str_detect(name, 'drop') ~ 'Dropout',
+        str_detect(name, '_rate') ~ 'Rate',
+        str_detect(name, '_reverse') ~ 'Direction',
+        str_detect(name, 'train_loss') ~ 'Loss'
+        # TRUE ~ 'All'
+      ),
+      node_attr = case_when(
+        str_detect(name, 'decay') ~ 'Decay',
+        str_detect(name, 'train_loss') ~ '',
+        TRUE ~ 'Base'
+      )
+    ) |> 
+    mutate(
+      node_type = factor(node_type, levels = c('Depth', 'Width', 'Dropout', 'Rate', 'Direction', 'Loss')),
+      node_attr = factor(node_attr, levels = c('Decay', 'Base', ''))
+    ) |>
+    
+    ggplot(aes(x = trial_index, y = interaction(node_type, node_attr), fill = 100*pr_max))+
+    geom_tile()+
+    scale_y_discrete(guide = "axis_nested")+
+    labs(x = 'Hyperparameter Set', y = '', title = 'Iterative Improvement of Hyperparameters', fill = '% Max')+
+    theme(panel.background = element_rect(fill = "white", colour = NA),
+          axis.ticks = element_line(colour = 'gray'))
+  
+  return(plt)
+  
+}
+
+hvnn <- read_parquet('./ax_tables_vnn.parquet')
+hdnn <- read_parquet('./ax_tables_dnn.parquet')
+
+p1 <- plt_hyps_grid_vnn(filter(hvnn, exp == 'data_gmx', phn == 'phno_OilDry'))
+p2 <- plt_hyps_grid_dnn(filter(hdnn, exp == 'data_gmx', phn == 'phno_OilDry'))
+
+p1/p2
+
+
+# TODO think about refactoring this so that the data prep and plotting are separate
+# that could ensure the tiles are the same size.
+```
+
+
+
+
+```{r hyps vis 2}
+# Hyperparameters ---
+
+hvnn <- read_parquet('./ax_tables_vnn.parquet')
+hdnn <- read_parquet('./ax_tables_dnn.parquet')
+
+hvcols = c(
+  "train_loss", 
+  "default_out_nodes_inp", "default_out_nodes_edge", 
+  "default_drop_nodes_inp", "default_drop_nodes_edge", "default_drop_nodes_out", 
+  "default_reps_nodes_inp", "default_reps_nodes_edge", "default_reps_nodes_out", 
+  "default_decay_rate"#, "default_out_nodes_out"
+  )
+  
+hdcols = c(
+  "train_loss", 
+  "hidden_layers", "width", "drop", 
+  "width_decay_rate", "drop_decay_rate", 
+  "width_decay_reverse", "drop_decay_reverse"#, 
+  # "size_out",
+  # "size_in"
+  )
+
+
+M <- full_join(
+  pivot_longer(hvnn, cols = all_of(hvcols)), 
+  pivot_longer(hdnn, cols = all_of(hdcols))
+)
+  
+
+plt_hyps_grid_compare <- function(
+    df = filter(M, exp == "data_dme" & phn == "ADHReplicates_hzg" )
+){
+  plt <- df |> 
+    full_join(data.frame(
+      model = c(''),
+      trial_index = c(NA)
+      # trial_index = c(0),
+    )) |>
+    group_by(exp, phn, model, name) |>
+    # set scaling col
+    mutate(pr_max = (value - min(value))/(max(value) - min(value)) ) |>
+    ungroup() |>
+    mutate(
+      # higher level grouping
+      node_type = case_when(
+        name %in% c('train_loss') ~ '',
+        name %in% c( 'default_out_nodes_inp',  'default_out_nodes_edge', 'default_drop_nodes_out', 'width') ~ 'Width',
+        name %in% c('default_decay_rate', 'width_decay_rate', 'width_decay_reverse') ~ 'Width',
+        name %in% c('default_drop_nodes_inp', 'default_drop_nodes_edge'                          , 'drop') ~ 'Dropout',
+        name %in% c('drop_decay_rate', 'drop_decay_reverse') ~ 'Dropout',
+        name %in% c('default_reps_nodes_inp', 'default_reps_nodes_edge', 'default_reps_nodes_out') ~ 'Repeats',
+        name %in% c('hidden_layers') ~ '',
+        TRUE ~ ''
+      ),
+      # this is the lowest level 
+      node_attr = case_when(
+        name %in% c('train_loss') ~ 'Loss',    
+        
+        name %in% c('default_out_nodes_inp', 'default_drop_nodes_inp', 'default_reps_nodes_inp') ~ 'Input',
+        name %in% c('default_out_nodes_edge', 'default_drop_nodes_edge', 'default_reps_nodes_edge') ~ 'Edge',
+        
+        
+        name %in% c('width') ~ 'Edge',
+        name %in% c('default_drop_nodes_out', 'default_reps_nodes_out') ~ 'Output',
+        
+        name %in% c('default_decay_rate', 'width_decay_rate',    'drop_decay_rate'   ) ~ 'Rate',      
+        name %in% c(                      'width_decay_reverse', 'drop_decay_reverse') ~ 'Order',  
+        name %in% c('drop') ~ 'Edge',
+        name %in% c('hidden_layers') ~ 'Layers',
+        
+        TRUE ~ ''
+      )) |>
+    mutate(model = case_when(
+      model == 'vnn' ~ 'VNN',
+      model == 'dnn' ~ 'DNN',
+      TRUE ~ ''
+    )) |>
+    mutate(
+      model =     factor(model,     levels = c('DNN', '', 'VNN')),
+      node_type = factor(node_type, levels = c('', 'Repeats', 'Dropout', 'Width')),
+      node_attr = factor(node_attr, levels = c('Loss', 
+                                               'Order', 'Rate', 'Base', 'Layers', 'Input', 'Edge', 'Output',
+                                               ''))
+    ) |>
+    # ggplot(aes(x = trial_index, y = interaction(name, node_attr, node_type, model), fill = 100*pr_max))+
+    ggplot(aes(x = trial_index, y = interaction(node_attr, node_type, model), fill = 100*pr_max))+
+    geom_tile()+
+    # facet_wrap(.~model, scales = "free", ncol = 1)
+    scale_y_discrete(guide = "axis_nested")+
+    labs(x = 'Hyperparameter Set', y = '', title = 'Iterative Improvement of Hyperparameters', fill = '% Max')+
+    theme(panel.background = element_rect(fill = "white", colour = NA), axis.ticks = element_line(colour = 'gray'))
+  
+  return(plt)
+  
+}
+
+
+#plt_hyps_grid_compare(df = filter(
+#  M, exp == "data_dme" & 
+#     phn == "ADHReplicates_hzg" )
+#  )+labs(title = '')
+
+
+plt_settings <- M |> select(exp, phn) |> distinct()
+
+phn_clean_names <-c(
+  'ADHReplicates_hzg',                   '*D. mel.* Alcohol Dehydrogenase',
+  'phno_ProteinDry',                     '*G. max* Protein',  
+  'phno_StachyoseDry',                   '*G. max* Stachyose',
+  'phno_OilDry',                         '*G. max* Oil', 
+  'phno_all_Pollen_GDD__WIH2_2020',      '*Z. mays* Pollen GDD (WIH2 2020)',  
+  'phno_all_Pollen_GDD__FTaxaREnvRGxE',  '*Z. mays* Pollen GDD (Est.)',
+  'phno_all_Yield_Mg_ha__IAH3_2021',     '*Z. mays* Yield Mg/ha (IAH3 2021)',
+  'phno_all_Yield_Mg_ha__FTaxaREnvRGxE', '*Z. mays* Yield Mg/ha (Est.)'
+  )
+
+phn_clean_names = data.frame(
+  phn = phn_clean_names[seq(1, length(phn_clean_names), 2)],
+  new = phn_clean_names[seq(2, length(phn_clean_names), 2)]
+  )
+
+
+plt_hyps_lst <- map(
+  seq(1, nrow(plt_settings)), 
+  function(i){
+    plt_hyps_grid_compare(df = filter(
+      M, 
+      exp == as.character(plt_settings[i, 'exp']) & 
+      phn == as.character(plt_settings[i, 'phn'])
+    )
+    )+labs(
+      title = select(filter(phn_clean_names, 
+                            phn == as.character(plt_settings[i, 'phn'])),
+                     new)
+      ) + 
+      theme(title = element_markdown(), 
+            legend.position = 'none')
+  }
+)
+
+p <- plt_hyps_lst
+
+design <- "
+ABCD
+EFGH
+"
+
+p[[1]]+p[[2]]+p[[3]]+p[[4]]+p[[5]]+p[[6]]+p[[7]]+p[[8]]+plot_layout(design = design)
+```
