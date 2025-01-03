@@ -659,42 +659,127 @@ def train_one_model(
     inp_tensor_lookup = inp_node_idx_dict,
     log_dir = lightning_log_dir # This is explicit istead of using the global scope so that hyps/training can log different dirs. 
     ):
+    def _propose_model():
+        myvnn = sparsevnn.util.mk_vnnhelper(
+                edge_dict = edge_dict,
+                num_nucleotides = params_data['num_nucleotides'], # this could also be 1 for major/minor allele. 
+                inp_tensor_lookup = inp_tensor_lookup,
+                params = params
+                    )
 
-    myvnn = sparsevnn.util.mk_vnnhelper(
-            edge_dict = edge_dict,
-            num_nucleotides = params_data['num_nucleotides'], # this could also be 1 for major/minor allele. 
-            inp_tensor_lookup = inp_tensor_lookup,
-            params = params
-                )
+        dd = sparsevnn.core.mk_NodeGroups(edge_dict=myvnn.edge_dict, dependancy_order=myvnn.dependancy_order)
 
-    dd = sparsevnn.core.mk_NodeGroups(edge_dict=myvnn.edge_dict, dependancy_order=myvnn.dependancy_order)
+        M_list = [
+            structured_layer_info(
+            i = ii, 
+            node_groups=dd, 
+            node_props=myvnn.node_props, 
+            edge_dict=myvnn.edge_dict, 
+            as_sparse=True,
+            inp_tensor_nucleotides= params_data['num_nucleotides'],
+            # lambda to only provide the lookup for the 0th grouping (input level)
+            inp_tensor_lookup = (lambda x: inp_tensor_lookup if x == 0 else None)(ii)
+            )
+            for ii in sorted(list(dd.keys()))]
 
-    M_list = [
-        structured_layer_info(
-        i = ii, 
-        node_groups=dd, 
-        node_props=myvnn.node_props, 
-        edge_dict=myvnn.edge_dict, 
-        as_sparse=True,
-        inp_tensor_nucleotides= params_data['num_nucleotides'],
-        # lambda to only provide the lookup for the 0th grouping (input level)
-        inp_tensor_lookup = (lambda x: inp_tensor_lookup if x == 0 else None)(ii)
-        )
-        for ii in sorted(list(dd.keys()))]
+        # layer_list = info_list_to_layer_list(M_list = M_list, nonlinearity = F.relu)
+        layer_list = info_list_to_layer_list(M_list = M_list, nonlinearity = F.tanh)
+        model      = SparseVNN(layer_list = layer_list)
+        return model
+    
+    # with relu there is a chance that the model in initialled fully in a null field. 
+    # Test and retry models until there's an okay initialization.
 
-    layer_list = info_list_to_layer_list(M_list = M_list, nonlinearity = F.relu)
-    model      = SparseVNN(layer_list = layer_list)
-    VNN        = plDNN_general(model)
-    optimizer = VNN.configure_optimizers()
-    logger    = CSVLogger(log_dir, name=exp_name)
-    logger.log_hyperparams(params={
-        'params': params,
-        'params_data': params_data,
-        'params_run': params_run
-    })
-    trainer = pl.Trainer(max_epochs=params_run['max_epoch'], logger=logger)
-    trainer.fit(model=VNN, train_dataloaders=training_dataloader, val_dataloaders=validation_dataloader)
-    return M_list, trainer
+    # for try_sd_out_i in range(100):
+    #     yhat_sd_tol = 0.0001 # <---- Tolerance for yhat sd over minibatches
+
+    #     model = _propose_model()
+    #     stds = []
+    #     for i, (y, x) in enumerate(training_dataloader):
+    #         if x.device.type == 'cuda':
+    #             model = model.to('cuda')
+    #         if y.std().detach().cpu() > yhat_sd_tol: # ignore any minibatches were the y's are effectively identical
+    #             stds.append(model(x).std().detach().cpu().reshape(1))
+    #     not_sd_0 = (torch.concat(stds).mean() >= 0.0001)         
+
+    #     if not_sd_0:
+    #         print(f'\nNon-zero yhat sd on try {try_sd_out_i}\n')
+    #         break
+
+    # if not not_sd_0:
+    #     print('\nFailed to initialize with non-zero yhat sd')
+    #     print('Exiting.\n')
+
+    def calc_dl_yhat_stats(dl, model, stats = ['pr_uniq']):
+        out_stats = {}
+        # assume that the genome tensor was deduplciated (should be because we're reading from a file) (exception: error in names)
+        # check if matches have the same input?
+        # I'm re-implmenting some features we get for free in the dataloader. 
+        bs = dl.batch_size # batch size
+        gs = dl.dataset.G.size()[0] # obs
+        mb = [i for i in range(0, gs, bs)] # minibatch idxs
+        if mb[-1] != [gs]: mb = mb + [gs] # add final stop index (len)
+
+        mb = [(i,j) for i,j in zip(mb, mb[1:])]
+
+        model = model.eval()
+        yhats = []
+        for (i,j) in mb:
+            yhat = model(dl.dataset.G[i:j])
+            yhats.append(yhat.detach().cpu())
+        model = model.train()
+
+        yhats = torch.concat(yhats)
+
+        if 'pr_uniq' in stats: # calculate percent unique
+            pr_uniq = torch.unique(yhats).shape[0] / yhats.shape[0]
+            out_stats['pr_uniq'] = pr_uniq
+
+        if 'std' in stats:
+            out_stats['std'] = float(yhats.std())
+
+        return out_stats
+
+
+    pr_uniq_threshold  = 0.95 # at .99 failed with F.relu and 100 iterations. Leaky relu also failed. 
+    check_model_trials = 100
+
+    tmp = []
+    for check_model_i in range(check_model_trials):
+        model = _propose_model()
+        model = model.to('cuda')
+        # we should only really need to do this for the training dataloader because we use the same data underthe hood for both
+        pr_uniq = calc_dl_yhat_stats(dl = training_dataloader, model = model, stats = ['pr_uniq'])['pr_uniq']
+        tmp.append(pr_uniq)
+        if pr_uniq >= pr_uniq_threshold:
+            break
+
+    print(f"\nyhat distribution check:")    
+    print(f"\npass\ttrials\tmax\tthreshold")
+    print(f"{pr_uniq >= pr_uniq_threshold}\t{len(tmp)}\t{check_model_trials}\t{pr_uniq_threshold}")
+    print(f"\n") 
+    print(f"pr_uniq recorded:")   
+    print(f"{tmp}")
+    print(f"\n")    
+
+    del tmp
+    if not (pr_uniq >= pr_uniq_threshold):
+        print('Initialization condition not met. Consider modifying `pr_uniq_threshold`. Breaking.')
+        # NOTE: this will break (intentionally). 
+        None[0] 
+
+    else:
+        VNN        = plDNN_general(model)
+        optimizer = VNN.configure_optimizers()
+        logger    = CSVLogger(log_dir, name=exp_name)
+        logger.log_hyperparams(params={
+            'params': params,
+            'params_data': params_data,
+            'params_run': params_run
+        })
+        trainer = pl.Trainer(max_epochs=params_run['max_epoch'], logger=logger)
+        trainer.fit(model=VNN, train_dataloaders=training_dataloader, val_dataloaders=validation_dataloader)
+        return M_list, trainer
 
 
 
@@ -727,7 +812,7 @@ def vnn_from_state_dict(
         )
         for ii in sorted(list(dd.keys()))]
 
-    layer_list = info_list_to_layer_list(M_list = M_list, nonlinearity = F.relu)
+    layer_list = info_list_to_layer_list(M_list = M_list, nonlinearity = F.tanh)
     model      = SparseVNN(layer_list = layer_list)
     # now we load the state dict into the model
     model.load_state_dict(torch.load(state_dict_path))
