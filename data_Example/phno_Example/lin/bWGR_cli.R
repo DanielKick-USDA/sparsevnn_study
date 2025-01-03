@@ -133,6 +133,9 @@ res[train_idx[,1], 'split'] <- 'train'
 res[ test_idx[,1], 'split'] <- 'test'
 
 
+arrow::write_parquet(
+  as_arrow_table(res),
+  paste(c(out_dir, '/', hash, '_bWGR_yhat.parquet'), collapse = ''))
 
 arrow::write_parquet(
   as_arrow_table(data.frame(mu = fm$mu)),
