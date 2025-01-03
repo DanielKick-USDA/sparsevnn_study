@@ -82,7 +82,7 @@ params_list = [
     {
     'name': 'width',
     'type': 'range',
-    'bounds': [1, 4096],
+    'bounds': [1, 2048],
     'value_type': 'int',
     'log_scale': False
     },
