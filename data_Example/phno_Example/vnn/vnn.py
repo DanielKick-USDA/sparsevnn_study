@@ -898,9 +898,17 @@ match params_run['run_mode']: # setup tune train predict eval
         # Run trials 
         if run_trials_bool:
             for i in range(params_run['tune_trials']):
-                parameterization, trial_index = ax_client.get_next_trial()
-                # Local evaluation here can be replaced with deployment to external system.
-                ax_client.complete_trial(trial_index=trial_index, raw_data=evaluate(parameterization)) # NOTE plDNN_general and other functions can be patched
+                run_next_trial_bool = False
+                # At each step check if we have reached the maximum. This allows us to request extra trials in case initialization fails
+                if type(None) == type(ax_client.generation_strategy.trials_as_df):
+                    run_next_trial_bool = True
+                elif params_run['tune_max'] <= (ax_client.generation_strategy.trials_as_df.index.max()+1):
+                    run_next_trial_bool = True
+                    
+                if run_next_trial_bool:
+                    parameterization, trial_index = ax_client.get_next_trial()
+                    # Local evaluation here can be replaced with deployment to external system.
+                    ax_client.complete_trial(trial_index=trial_index, raw_data=evaluate(parameterization)) # NOTE plDNN_general and other functions can be patched
 
             ax_client.save_to_json_file(filepath = json_path)
 
