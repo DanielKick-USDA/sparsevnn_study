@@ -6,21 +6,182 @@ editor: source
 
 <!-- x = system('ls', intern = TRUE) -->
 
+
+Before working with the data in output ensure it's up to date. This can be done by running
+`cd /home/daniel.kick/daniel/sparsevnn_study/output && sbatch refresh_data.sbatch`
+
+
 ```{r}
+rm(list = ls()) # yeah, yeah, I know. 
 setwd("~/daniel/sparsevnn_study/output")
 
 
 library(arrow)
 library(tidyverse)
+
+# run on hpc
+# install.packages('viridis')
+# install.packages('patchwork')
+# install.packages('ggh4x')
+
+# install.packages('ggthemes')
+# library(ggthemes) # for tufte
+# if using scales take a look at
+  # scale_y_log10(labels = label_log())+
+  # scale_y_log10()+
+  # label_log(base = 10, digits = 3)+
+  # scale_y_continuous(labels = scales::comma)+
+
+
+library(ggtext) # for element markdown
+
 library(viridis)
 library(patchwork)
+library(cowplot)
 library('ggh4x')
-library(ggthemes)
+options(scipen = 10L)
+```
+
+# Custom
+```{r}
+# Return metrics as a tidy df
+load_model_metrics <- function(
+    path = '../data_gmx_lsuv_tanh/phno_OilDry/vnn/models/vnn/version_0/metrics.csv',
+    tidy = T
+){
+  metrics <- read_csv(path)
+  if(tidy == TRUE){
+    metrics <- rbind(
+      
+      (metrics |>
+         select(-val_loss) |>
+         drop_na() |>
+         mutate(split = 'trn', loss = train_loss )|>
+         select(-train_loss)),
+      
+      (metrics |>
+         select(-train_loss) |>
+         drop_na() |>
+         mutate(split = 'val', loss = val_loss )|>
+         select(-val_loss))
+    )
+  }
+  return(
+    list(
+      metrics=metrics
+    ))      
+}
 ```
 
 
 
-```{r hyps vis 1}
+
+# All Metadata
+
+```{r}
+md <- list()
+
+md$net_hist <- data.frame(path = system("find ../data_* -name metrics.csv",             intern = T))
+md$net_pred <- data.frame(path = system("find ../data_* -name '*_y[hv]a[tr]_*parquet'", intern = T))
+md$net_eval <- data.frame(path = system("find ../data_* -name '*_eval_*parquet'",       intern = T))
+md$lin_blup <- data.frame(path = system("find ../data_* -name '*_bWGR_yhat.parquet'",   intern = T))
+
+# have to ignore everything that isn't lin/models
+x <- system("find ../data_* -name 'GAPIT.Association.GWAS_Results.BLINK.*.csv'", intern = T)
+x <- x[str_detect(x, 'lin/models/gwas')]
+md$lin_gwas <- data.frame(path = x)
+
+
+
+# cleaning metadata
+md_net_pth <- function(M){
+  M <- M |> 
+  separate_wider_delim(
+    path, 
+    "/", 
+    names = c("drp1", "data", "phno", "model", "phase", "drp2", "version", "file"), 
+    too_many = "drop", 
+    cols_remove = F
+    ) |> 
+  select(-drp1, -drp2)
+  
+  return(M)
+}
+
+
+md$net_hist <- md_net_pth(M = md$net_hist) |> 
+  separate_wider_delim(file, ".",
+                       names = c("info"), 
+                       too_many = "drop",
+                       cols_remove = T)
+
+md$net_pred <- md_net_pth(M = md$net_pred) |> 
+  separate_wider_delim(file, ".",
+                       names = c("info"), 
+                       too_many = "drop",
+                       cols_remove = T) |> 
+  separate_wider_delim(info, "_",
+                       names = c("hash", "info"), 
+                       too_many = "merge",
+                       cols_remove = T) 
+
+md$net_eval <- md_net_pth(M = md$net_eval) |> 
+  separate_wider_delim(file, "_",
+                       names = c("hash", "info"), 
+                       too_many = "merge",
+                       cols_remove = T) |> #select(-hash) |>
+  separate_wider_delim(info, ".",
+                       names = c("info", "rm"), 
+                       too_many = "merge",
+                       cols_remove = T) |> select(-rm) |>
+  distinct()
+
+
+
+md$lin_blup <- md$lin_blup |>
+  separate_wider_delim(path,"/",
+                       names = c("drp1", "data", "phno", "model", "phase", "drp2", "file"), 
+                       too_many = "drop", 
+                       cols_remove = F) |> select(-drp1, -drp2) |>
+  separate_wider_delim(file, "_",
+                       names = c("hash", "info"), 
+                       too_many = "merge",
+                       cols_remove = T) |>
+  separate_wider_delim(info, ".",
+                       names = c("info"), 
+                       too_many = "drop",
+                       cols_remove = T) 
+
+
+md$lin_gwas <- md$lin_gwas |>
+  separate_wider_delim(path,"/",
+                       names = c("drp1", "data", "phno", "model", "phase", "drp2", "file"), 
+                       too_many = "drop", 
+                       cols_remove = F) |> select(-drp1, -drp2) |>
+  rename(info = file)
+
+
+md <- full_join(md$net_hist, md$net_pred) |> 
+  full_join(md$net_eval) |>
+  full_join(md$lin_blup) |>
+  full_join(md$lin_gwas)
+
+
+# Drop phenotypes that we're ignoring going forward
+md <- md |> 
+  filter(!(phno %in% c("phno_all_Pollen_GDD__WIH2_2020", 
+                       "phno_all_Yield_Mg_ha__IAH3_2021")))
+
+phno_iter <- sort(unique(md$phno))
+
+md
+```
+
+
+
+## [x] Hyps Stabilization
+
+```{r hyps vis 1, eval=FALSE}
 # Hyperparameters ---
 
 
@@ -126,7 +287,10 @@ plt_hyps_grid_dnn <- function(
   return(plt)
   
 }
+```
 
+
+```{r hyps vis 1, eval=FALSE}
 hvnn <- read_parquet('./ax_tables_vnn.parquet')
 hdnn <- read_parquet('./ax_tables_dnn.parquet')
 
@@ -138,9 +302,28 @@ p1/p2
 
 # TODO think about refactoring this so that the data prep and plotting are separate
 # that could ensure the tiles are the same size.
+  
+#   scale_fill_viridis(
+#     option = 'B'#LETTERS[]
+# # #     "magma" (or "A")
+# # # 
+# # # "inferno" (or "B")
+# # # 
+# # # "plasma" (or "C")
+# # # 
+# # # "viridis" (or "D")
+# # # 
+# # # "cividis" (or "E")
+# # # 
+# # # "rocket" (or "F")
+# # # 
+# # # "mako" (or "G")
+# # # 
+# # # "turbo" (or "H")
+# #     
+#   ) +
+
 ```
-
-
 
 
 ```{r hyps vis 2}
@@ -171,8 +354,10 @@ M <- full_join(
   pivot_longer(hvnn, cols = all_of(hvcols)), 
   pivot_longer(hdnn, cols = all_of(hdcols))
 )
-  
+```
 
+
+```{r hyps vis 2}
 plt_hyps_grid_compare <- function(
     df = filter(M, exp == "data_dme" & phn == "ADHReplicates_hzg" )
 ){
@@ -239,26 +424,40 @@ plt_hyps_grid_compare <- function(
   return(plt)
   
 }
+```
 
 
-#plt_hyps_grid_compare(df = filter(
-#  M, exp == "data_dme" & 
-#     phn == "ADHReplicates_hzg" )
-#  )+labs(title = '')
+```{r hyps vis 2}
+plt_hyps_grid_compare(df = filter(
+  M, exp == "data_dme" & 
+     phn == "ADHReplicates_hzg" )
+  )+labs(title = '')
 
 
-plt_settings <- M |> select(exp, phn) |> distinct()
+
+plt_settings <- M   |> 
+  select(exp, phn)  |> 
+  distinct()        |> 
+  mutate(phn = factor(phn, levels = phno_iter)) |>
+  arrange(exp, phn) |>
+  mutate(phn = as.character(phn))
+
+
 
 phn_clean_names <-c(
   'ADHReplicates_hzg',                   '*D. mel.* Alcohol Dehydrogenase',
   'phno_ProteinDry',                     '*G. max* Protein',  
   'phno_StachyoseDry',                   '*G. max* Stachyose',
   'phno_OilDry',                         '*G. max* Oil', 
-  'phno_all_Pollen_GDD__WIH2_2020',      '*Z. mays* Pollen GDD (WIH2 2020)',  
+  # 'phno_all_Pollen_GDD__WIH2_2020',      '*Z. mays* Pollen GDD (WIH2 2020)',  
   'phno_all_Pollen_GDD__FTaxaREnvRGxE',  '*Z. mays* Pollen GDD (Est.)',
-  'phno_all_Yield_Mg_ha__IAH3_2021',     '*Z. mays* Yield Mg/ha (IAH3 2021)',
-  'phno_all_Yield_Mg_ha__FTaxaREnvRGxE', '*Z. mays* Yield Mg/ha (Est.)'
+  # 'phno_all_Yield_Mg_ha__IAH3_2021',     '*Z. mays* Yield Mg/ha (IAH3 2021)',
+  'phno_all_Yield_Mg_ha__FTaxaREnvRGxE', '*Z. mays* Yield Mg/ha (Est.)',
+  'phno_all_Yield_Mg_ha',                '*Z. mays* Yield Mg/ha (Raw)'
   )
+
+
+
 
 phn_clean_names = data.frame(
   phn = phn_clean_names[seq(1, length(phn_clean_names), 2)],
@@ -269,27 +468,1560 @@ phn_clean_names = data.frame(
 plt_hyps_lst <- map(
   seq(1, nrow(plt_settings)), 
   function(i){
+    exp_type = as.character(plt_settings[i, 'exp'])
+    exp_type = str_extract(exp_type, pattern = '_....$')
+    if (is.na(exp_type)){
+      exp_type = ''
+    } else {
+      exp_type = str_remove_all(exp_type, '_')
+    }
+    
     plt_hyps_grid_compare(df = filter(
       M, 
       exp == as.character(plt_settings[i, 'exp']) & 
       phn == as.character(plt_settings[i, 'phn'])
     )
     )+labs(
-      title = select(filter(phn_clean_names, 
-                            phn == as.character(plt_settings[i, 'phn'])),
-                     new)
-      ) + 
+      title = paste0(
+        select(filter(
+          phn_clean_names, 
+          phn == as.character(plt_settings[i, 'phn'])),
+          new), ' ', exp_type)
+    ) + 
       theme(title = element_markdown(), 
             legend.position = 'none')
   }
 )
 
+
 p <- plt_hyps_lst
 
+
+
+
+map(c(
+  "ADHReplicates_hzg",
+  "phno_ProteinDry",
+  "phno_StachyoseDry",
+  "phno_OilDry",
+  "phno_all_Pollen_GDD__FTaxaREnvRGxE",
+  "phno_all_Yield_Mg_ha__FTaxaREnvRGxE",
+  "phno_all_Yield_Mg_ha"
+), function(ith_phn){
+  cowplot::plot_grid(plotlist = p[(
+    mutate(plt_settings, n = seq(1, nrow(plt_settings))) |> filter(phn == ith_phn))$n
+  ], ncol = 1)
+})
+
+
+# design <- "
+# ADEF
+# BGHI
+# CJK#
+# "
+# 
+# p[[1]]+p[[2]]+p[[3]]+p[[4]]+p[[5]]+p[[6]]+p[[7]]+p[[8]]+plot_layout(design = design)
+```
+
+
+
+
+
+## [X] Hyps Performance
+```{r}
+plt_net_metrics <- function(md, phno_i, phase_i){
+  tmp_md <- md |> 
+    filter(
+      phase == phase_i, 
+      info == 'metrics', 
+      phno == phno_i
+    ) 
+  
+  tmp_md <- tmp_md |>
+    mutate(init = case_when(
+      str_detect(data, 'lsuv_relu$') ~ 'l.relu',
+      str_detect(data, 'lsuv_tanh$') ~ 'l.tanh',
+      str_detect(data, 'lsuv_vlin$') ~ 'l.none',
+      TRUE ~ 'r.tanh'
+    )) 
+  
+  tmp_dl <- map(tmp_md$path, function(ii){mutate(load_model_metrics(ii)$metrics, path=ii)})
+  
+  tmp_dl <- full_join(tmp_md, do.call(rbind, tmp_dl) )
+  
+  # NOTE without modificaiton to the init field it's best to filter the records
+  # tmp_dl <- tmp_dl |> filter(model == 'vnn')
+  tmp_dl <- tmp_dl |> 
+    mutate(init = paste0(model, '.', init)) 
+  
+  
+  
+  
+  
+  tmp_dl <- full_join(
+    tmp_dl, 
+    expand.grid(
+      phno = phno_i,
+      split = c('trn', 'val'),
+      init = c(
+        'dnn.r.tanh', 
+        'vnn.r.tanh', 
+        'vnn.l.tanh', 
+        'vnn.l.relu',
+        'vnn.l.none'
+    )
+    )) |>  
+    mutate(init = factor(init, levels = c(
+      'dnn.r.tanh', 
+      'vnn.r.tanh', 
+      'vnn.l.tanh', 
+      'vnn.l.relu',
+      'vnn.l.none'
+    )))
+  
+  
+  tmp_dl_envelope <- tmp_dl |>
+    filter(split == 'trn') |>
+    # filter(model == 'vnn', split == 'trn') |>
+    group_by(data, phno, model, init, split, epoch) |>
+    mutate(
+      min_trn = case_when(split == 'trn' ~ min(loss)),
+      max_trn = case_when(split == 'trn' ~ max(loss)) )   |>
+    select(-loss, -step) |>
+    distinct()
+  
+  
+  if (phase_i == 'lightning'){
+    # color by percent of trials
+    # plt <- tmp_dl |>
+    #   filter(split == 'val') |>
+    #   mutate(v = as.numeric(str_extract(version, '\\d+$'))) |>
+    #   group_by(data, phno, model, phase, init) |>
+    #   mutate(pr.trial = v/max(v)) |>
+    #   ggplot(aes(x = epoch, group = path))+
+    #   geom_ribbon(data=tmp_dl_envelope, aes(ymin=min_trn, ymax=max_trn), alpha = 0.3)+
+    #   geom_line(aes(y = loss, color =  pr.trial))+
+    #   theme_minimal()+
+    #   facet_grid(phno~init)
+    
+    # Show last entry
+    plt <- tmp_dl |>
+      filter(split == 'val') |>
+      mutate(v = as.numeric(str_extract(version, '\\d+$'))) |>
+      group_by(data, phno, model, phase, init) |>
+      mutate(last.trial = case_when(v == max(v) ~ TRUE, 
+                                    TRUE ~ FALSE)) |>
+      arrange(epoch, step) |>
+      ggplot(aes(x = epoch, group = path))+
+      geom_ribbon(data=tmp_dl_envelope, aes(ymin=min_trn, ymax=max_trn), alpha = 0.3)+
+      geom_line(aes(y = loss, color =  last.trial), alpha = 0.3)+
+      theme_minimal()+
+      facet_grid(phno~init)+
+      scale_color_manual(values = c('grey', 'firebrick'))+
+      theme(legend.position = 'none')
+
+  } else if (phase_i == 'models'){
+    
+    plt <- tmp_dl |>
+      filter(split == 'val') |>
+      arrange(epoch, step) |>
+      # filter(model == 'vnn', split == 'val') |>
+      ggplot(aes(x = epoch, group = path))+
+      geom_ribbon(data=tmp_dl_envelope, aes(ymin=min_trn, ymax=max_trn), alpha = 0.3)+
+      geom_line(aes(y = loss))+
+      theme_minimal()+
+      # coord_cartesian(xlim = c(0, 1))+
+      facet_grid(phno~init)
+  }
+  return(plt)
+}
+```
+
+
+```{r}
+plt_net_metrics(md = md, phno_i = 'phno_all_Yield_Mg_ha', phase_i = 'lightning')
+
+plt_list <- map(phno_iter, function(ii){
+  plt_net_metrics(md = md, phase_i = 'lightning', phno_i = ii)
+  })
+
+
+
+
+plt_list <- map(plt_list, function(e){
+  e+scale_y_continuous(
+        trans = "log10",
+        breaks = c(0.5, 1, 10, 100, 1000)
+    )
+  })
+
+
+
+
+p <- plt_list
+names(p) <- phno_iter
+
+
+design <- "
+AABE
+AACF
+AADG
+"
+
+(
+  p[["ADHReplicates_hzg"]]+
+  p[["phno_OilDry"]]+
+  p[["phno_ProteinDry"]]+
+  p[["phno_StachyoseDry"]]+ 
+  p[["phno_all_Pollen_GDD__FTaxaREnvRGxE"]]+
+  p[["phno_all_Yield_Mg_ha__FTaxaREnvRGxE"]]+
+  p[["phno_all_Yield_Mg_ha"]]
+)+plot_layout(design = design)
+```
+
+
+
+## [_] Err. Hist.
+
+```{r}
+# Example case with vnn -- used this to figure out the above function (`plt_net_metrics`)
+
+tmp_md <- md |> 
+  filter(
+    phase == 'models', 
+    info == 'metrics', 
+    phno == 'ADHReplicates_hzg'
+    ) 
+
+tmp_md <- tmp_md |>
+  mutate(init = case_when(
+    str_detect(data, 'lsuv_relu$') ~ 'l.relu',
+    str_detect(data, 'lsuv_tanh$') ~ 'l.tanh',
+    str_detect(data, 'lsuv_vlin$') ~ 'l.none',
+    TRUE ~ 'r.tanh'
+  )) 
+
+tmp_dl <- map(tmp_md$path, function(ii){mutate(load_model_metrics(ii)$metrics, path=ii)})
+
+tmp_dl <- full_join(tmp_md, do.call(rbind, tmp_dl) )
+
+tmp_dl_envelope <- tmp_dl |>
+  filter(model == 'vnn', split == 'trn') |>
+  group_by(data, phno, model, init, split, epoch) |>
+  mutate(
+    min_trn = case_when(split == 'trn' ~ min(loss)),
+    max_trn = case_when(split == 'trn' ~ max(loss)) )   |>
+  select(-loss, -step) |>
+  distinct()
+
+tmp_dl |>
+  filter(model == 'vnn', split == 'val') |>
+  # group_by(data, phno, model, init, split, epoch) |>
+  # mutate(loss = mean(loss)) |>
+  # distinct() |>
+  ggplot(aes(x = epoch, group = path))+
+  geom_ribbon(data=tmp_dl_envelope, aes(ymin=min_trn, ymax=max_trn), alpha = 0.3)+
+  geom_line(aes(y = loss))+
+  theme_minimal()+
+  # coord_cartesian(xlim = c(0, 1))+
+  facet_grid(phno~init)
+```
+
+
+
+```{r}
+# Extentsion that uses dnn
+
+map(phno_iter, function(ii){
+  plt_net_metrics(md = md, phase_i = 'models', phno_i = ii)
+  })
+
+
+plt_net_metrics(md = md, phase_i = 'models', phno_i = 'phno_all_Yield_Mg_ha')
+
+
+# what's up with vnn l relu
+
+tmp_md <- md |>
+  filter(
+    data == 'data_zma_lsuv_relu',
+    phase == 'models', 
+    phno  == 'phno_all_Yield_Mg_ha'
+    )
+
+
+do.call
+tmp_md$path
+
+
+tmp_dl <- full_join(
+  tmp_md, 
+  do.call(
+    rbind, 
+    map(tmp_md$path, function(ii){mutate(load_model_metrics(ii)$metrics, path=ii)})
+    ) )
+
+
+
+
+```
+
+
+
+## [_] Err. Prediction
+
+```{r}
+md |> 
+  filter(
+    phase == 'models'
+    ) |>
+  select(info) |>
+  distinct() |> print(n=24)
+
+
+info %in% c(
+  'yhat_cs_val',
+  'yhat_val',
+  'yvar_cs_center',
+  'yvar_cs_scale',
+  'yvar_cs_val',
+  'yvar_cs_trn',
+  'yvar_val',
+  'yhat_cs_trn',
+  'yvar_trn',
+  'yhat_trn',
+  'bWGR_yhat'
+)
+
+
+
+   <chr>                                                
+ 1 metrics                                              
+ 2 yhat_cs_val                                          
+ 3 yhat_val                                             
+ 4 yvar_cs_center                                       
+ 5 yvar_cs_scale                                        
+ 6 yvar_cs_val                                          
+ 7 yvar_cs_trn                                          
+ 8 yvar_val                                             
+ 9 yhat_cs_trn                                          
+10 yvar_trn                                             
+11 yhat_trn                                             
+12 eval_salience_snpwise_val                            
+13 eval_gradients_nodewise_weights                      
+14 eval_gradients_nodewise_bias                         
+15 eval_salience_snpwise_trn                            
+16 eval_salience_genewise_val                           
+17 eval_rho_nodewise_val                                
+18 eval_rho_nodewise_trn                                
+19 eval_salience_genewise_trn                           
+20 
+
+```
+
+
+
+
+
+
+# Model History 
+
+```{r}
+load_model_metrics <- function(
+    path = '../data_gmx_lsuv_tanh/phno_OilDry/vnn/models/vnn/version_0/metrics.csv',
+    tidy = T
+){
+  metrics <- read_csv(path)
+  if(tidy == TRUE){
+    metrics <- rbind(
+      
+      (metrics |>
+         select(-val_loss) |>
+         drop_na() |>
+         mutate(split = 'trn', loss = train_loss )|>
+         select(-train_loss)),
+      
+      (metrics |>
+         select(-train_loss) |>
+         drop_na() |>
+         mutate(split = 'val', loss = val_loss )|>
+         select(-val_loss))
+    )
+  }
+  return(
+    list(
+      metrics=metrics
+    ))      
+}
+
+
+# Make a dataframe with metadata for the files I want to work with:
+
+md <- data.frame(path = system("find ../data_* -name metrics.csv", intern = T))
+md <- md |> 
+  separate_wider_delim(
+    path, 
+    "/", 
+    names = c("drp1", "data", "phno", "model", "phase", "drp2", "version"), 
+    too_many = "drop", 
+    cols_remove = F
+    ) |> 
+  select(-drp1, -drp2)
+
+
+# Drop phenotypes that we're ignoring going forward
+md <- md |> 
+  filter(!(phno %in% c("phno_all_Pollen_GDD__WIH2_2020", 
+                       "phno_all_Yield_Mg_ha__IAH3_2021")))
+
+
+ 
+
+# describe the data available
+md |> 
+  unite(data, data:phno, sep = ':') |>
+  unite(model, model:phase, sep = ':') |>
+  group_by(data, model) |>
+  # group_by(data, model, phase) |> 
+  tally() |>
+  pivot_wider(id_cols = data, names_from = model, values_from = n) |>
+  print(n = 30)
+
+
+vnn_model_paths <- md |> 
+  filter(model == 'vnn', phase == 'models') |>
+  select(path)
+
+vnn_model_metrics <- map(
+  vnn_model_paths$path, 
+  function(pth){
+    tmp <- load_model_metrics(path = pth)$metrics |> mutate(path = pth)
+  return(tmp)
+})
+
+
+vnn_model_metrics <- do.call(rbind, vnn_model_metrics)
+
+vnn_model_metrics <- left_join(
+  vnn_model_metrics,
+  md
+)
+
+
+
+vnn_model_metrics |>
+  select(epoch, step, split, loss, data, phno, version) |>
+  mutate(data = case_when(
+    str_detect(data, '.+lsuv_tanh$') ~ 'lsuv_tanh',
+    str_detect(data, '.+lsuv_relu$') ~ 'lsuv_relu',
+    TRUE ~ 'tanh'
+    )) |>
+  filter(split == 'val') |>
+  group_by(epoch, step, split, data, phno, version) |>
+  mutate(loss_mean = mean(loss)) |>
+  ggplot(aes(x = epoch, y = loss_mean, color = data, group = version))+
+  geom_line()+
+  facet_grid(phno~data)+
+  coord_cartesian(ylim = c(0, 2))+
+  theme_minimal()
+
+
+
+
+vnn_model_metrics |>
+  select(epoch, step, split, loss, data, phno, version) |>
+  mutate(data = case_when(
+    str_detect(data, '.+lsuv_tanh$') ~ 'lsuv_tanh',
+    str_detect(data, '.+lsuv_relu$') ~ 'lsuv_relu',
+    TRUE ~ 'tanh'
+    )) |>
+  filter(split != 'val') |>
+  group_by(epoch, step, split, data, phno, version) |>
+  mutate(loss_mean = mean(loss)) |>
+  ggplot(aes(x = epoch, y = loss_mean, color = split, group = interaction(split, version)))+
+  geom_line()+
+  facet_grid(phno~data)+
+  coord_cartesian(ylim = c(0, 2))+
+  theme_minimal()
+```
+
+
+# Interpretation 
+## Predictions
+```{r}
+
+
+md <- data.frame(path = c(system("find ../data_* -name '*_y[hv]a[tr]_*parquet'", intern = T)))
+
+md <- md |> 
+  separate_wider_delim(
+    path, 
+    "/", 
+    names = c("drp1", "data", "phno", "model", "phase", "drp2", "version", "file"), 
+    too_many = "drop", 
+    cols_remove = F
+    ) |> 
+  select(-drp1, -drp2)
+
+md <- md |> 
+  separate_wider_delim(
+    file, 
+    "_", 
+    names = c("hash", "info"), 
+    too_many = "merge",
+    cols_remove = T
+    ) |> 
+  select(-hash) |>
+  separate_wider_delim(
+    info, 
+    ".", 
+    names = c("info", "rm"), 
+    too_many = "merge",
+    cols_remove = T
+    ) |> 
+  select(-rm) |>
+  separate_wider_delim(
+    info,
+    "_",
+    names = c("variable", "info"),
+    too_many = "merge",
+    cols_remove = T
+    ) |>
+  distinct()
+
+
+md |> 
+  filter(
+  data == 'data_dme',
+  phno == 'ADHReplicates_hzg',
+  model == 'vnn',
+  phase == 'models',
+  version == 'version_4'
+) |> 
+  select(path)
+
+
+
+y_xb <- read_parquet('../data_dme/ADHReplicates_hzg/vnn/models/vnn/version_4/63dde66321_yvar_cs_center.parquet')$AdjADHSlope
+y_sd <- read_parquet('../data_dme/ADHReplicates_hzg/vnn/models/vnn/version_4/63dde66321_yvar_cs_scale.parquet')$AdjADHSlope
+
+yh_cs <- read_parquet('../data_dme/ADHReplicates_hzg/vnn/models/vnn/version_4/63dde66321_yhat_cs_val.parquet') |> rename(yh_cs = AdjADHSlope)
+yh    <- read_parquet('../data_dme/ADHReplicates_hzg/vnn/models/vnn/version_4/63dde66321_yhat_val.parquet')    |> rename(yh = AdjADHSlope)
+yv_cs <- read_parquet('../data_dme/ADHReplicates_hzg/vnn/models/vnn/version_4/63dde66321_yvar_cs_val.parquet') |> rename(yv_cs = AdjADHSlope)
+yv    <- read_parquet('../data_dme/ADHReplicates_hzg/vnn/models/vnn/version_4/63dde66321_yvar_val.parquet')    |> rename(yv = AdjADHSlope)
+
+
+M <- full_join(
+  full_join(yh, yv),
+  full_join(yh_cs, yv_cs)
+  ) |>
+  select(Split, Phno_Idx, Taxa, yh, yv, yh_cs, yv_cs)
+
+
+M |>
+  pivot_longer(cols = c(yh, yv, yh_cs)) |>
+  ggplot(aes(yv_cs, value))+
+  geom_point()+
+  facet_wrap(.~name)
+
+
+M |> 
+  select(yh, yv, yh_cs, yv_cs) |> 
+  corrr::correlate()
+
+
+M |>
+  ggplot(aes(x = yv_cs, y = yh_cs))+
+  geom_point()
+
+
+
+
+
+
+
+# M <- read_parquet('../data_dme/ADHReplicates_hzg/lin/models/blup/004100e7c1_bWGR_b.parquet')
+# M <- read_parquet('../data_dme/ADHReplicates_hzg/lin/models/blup/004100e7c1_bWGR_cxx.parquet')
+# M <- read_parquet('../data_dme/ADHReplicates_hzg/lin/models/blup/004100e7c1_bWGR_d.parquet')
+# M <- read_parquet('../data_dme/ADHReplicates_hzg/lin/models/blup/004100e7c1_bWGR_mu.parquet')
+# M <- read_parquet('../data_dme/ADHReplicates_hzg/lin/models/blup/004100e7c1_bWGR_Vb.parquet')
+# M <- read_parquet('../data_dme/ADHReplicates_hzg/lin/models/blup/004100e7c1_bWGR_Ve.parquet')
+
+
+M <- read_parquet('../data_dme/ADHReplicates_hzg/lin/models/blup/004100e7c1_bWGR_yhat.parquet')
+
+M |>
+  ggplot(aes(x = AdjADHSlope, y = yhat))+
+  geom_point()
+
+
+# M <- read_csv('../data_dme/ADHReplicates_hzg/lin/models/gwas/GAPIT.Association.Filter_GWAS_results.csv')
+
+M <- read_csv('../data_dme/ADHReplicates_hzg/lin/models/gwas/GAPIT.Association.GWAS_Results.BLINK.AdjADHSlope.csv')
+# M <- read_csv('../data_dme/ADHReplicates_hzg/lin/models/gwas/GAPIT.Association.GWAS_StdErr.BLINK.AdjADHSlope.csv')
+# M <- read_csv('../data_dme/ADHReplicates_hzg/lin/models/gwas/GAPIT.Association.Manhattans_Symphysic_Traitsnames.csv')
+# 
+# M <- read_csv('../data_dme/ADHReplicates_hzg/lin/models/gwas/GAPIT.Association.PVE.BLINK.AdjADHSlope.csv')
+# M <- read_csv('../data_dme/ADHReplicates_hzg/lin/models/gwas/GAPIT.Association.Vairance_markers.BLINK.AdjADHSlope.csv')
+# 
+# M <- read_csv('../data_dme/ADHReplicates_hzg/lin/models/gwas/GAPIT.Genotype.Distance.Rsquare.csv')
+# M <- read_csv('../data_dme/ADHReplicates_hzg/lin/models/gwas/GAPIT.Genotype.Frequency_MAF.csv')
+# 
+# M <- read_csv('../data_dme/ADHReplicates_hzg/lin/models/gwas/GAPIT.Genotype.PCA_eigenvalues.csv')
+# M <- read_csv('../data_dme/ADHReplicates_hzg/lin/models/gwas/GAPIT.Genotype.PCA.csv')
+
+
+M |>
+  mutate(nlogp = -log(`H&B.P.Value`)) |>
+  ggplot(aes(x=nlogp))+
+  geom_density()
+
+M2 <- M |>
+  mutate(nlogp = -log(`H&B.P.Value`)) |>
+  filter(nlogp > 1.9) |> 
+  arrange(Chr, desc(Pos))
+
+M2$Pos_i <- seq(1, nrow(M2))
+  
+
+M2 |>  
+  ggplot(aes(x=Pos_i, y=nlogp, color = Chr))+
+  geom_point()
+
+```
+
+
+## Evaluation
+```{r}
+md <- data.frame(path = c(system("find ../data_* -name '*_eval_*parquet'", intern = T)))
+
+md <- md |> 
+  separate_wider_delim(
+    path, 
+    "/", 
+    names = c("drp1", "data", "phno", "model", "phase", "drp2", "version", "file"), 
+    too_many = "drop", 
+    cols_remove = F
+    ) |> 
+  select(-drp1, -drp2)
+
+md <- md  |> 
+  separate_wider_delim(
+    file, 
+    "_", 
+    names = c("hash", "info"), 
+    too_many = "merge",
+    cols_remove = T
+    ) |> 
+  select(-hash) |>
+  separate_wider_delim(
+    info, 
+    ".", 
+    names = c("info", "rm"), 
+    too_many = "merge",
+    cols_remove = T
+    ) |> 
+  select(-rm) |>
+  distinct()
+
+
+md |> select(info) |> distinct() |> arrange(info)
+
+# 1 eval_gradients_nodewise_bias   
+# 2 eval_gradients_nodewise_weights
+# 3 eval_rho_nodewise_trn          
+# 4 eval_rho_nodewise_val          
+# 5 eval_salience_genewise_trn     
+# 6 eval_salience_genewise_val     
+# 7 eval_salience_snpwise_trn      
+# 8 eval_salience_snpwise_val
+
+md |> 
+  filter(model == 'vnn', phase == 'models', info == 'eval_salience_genewise_val') |>
+  select(path)
+
+
+
+# let's do some examples
+## Salience
+### SNPwise
+M <- read_parquet('../data_dme/ADHReplicates_hzg/vnn/models/vnn/version_4/63dde66321_eval_salience_snpwise_val.parquet')
+
+M <- M |> 
+  mutate(pos = as.numeric(pos)) |>
+  arrange(chrom, pos)
+
+M$pos_i <- seq(1, nrow(M))
+
+M |>
+  group_by(chrom) |> 
+  ungroup() |>
+  ggplot(aes(pos_i, salience, color = chrom))+
+  geom_point()
+
+### Genewise
+M <- read_parquet('../data_dme/ADHReplicates_hzg/vnn/models/vnn/version_4/63dde66321_eval_salience_genewise_val.parquet') 
+M <- M |> 
+  mutate(pos = as.numeric(pos)) |>
+  arrange(chrom, pos)
+
+M$pos_i <- seq(1, nrow(M))
+
+M |>
+  group_by(chrom) |> 
+  ungroup() |>
+  ggplot(aes(pos_i, salience, color = chrom))+
+  geom_point()
+
+
+# show the top few hits
+left_join(
+  (filter(M, salience > quantile(M$salience, .95)) |> select(pos) |> distinct()), 
+  M
+  ) |>
+  group_by(pos) |>
+  filter(row_number() == 1) |>
+  ungroup() |>
+  arrange(salience) |>
+  select(salience, cxn)
+
+
+## Gradients Nodes
+M_gb <- read_parquet('../data_dme/ADHReplicates_hzg/vnn/models/vnn/version_4/63dde66321_eval_gradients_nodewise_bias.parquet')
+M_gw <- read_parquet('../data_dme/ADHReplicates_hzg/vnn/models/vnn/version_4/63dde66321_eval_gradients_nodewise_weights.parquet')
+
+M_gwb <- full_join(
+  (select(M_gb, layer, k, val_bias_grads)   |> group_by(layer, k) |> 
+     mutate(val_bias_grads = max(abs(val_bias_grads))) |> distinct()),
+  (select(M_gw, layer, k, val_weight_grads) |> group_by(layer, k) |> 
+     mutate(val_weight_grads = max(abs(val_weight_grads))) |> distinct())
+)
+
+M_gwb |>
+  filter(k != 'yhat') |>
+  ggplot(aes(x = val_bias_grads, y = val_weight_grads))+
+  geom_point()
+
+M_gwb |>
+  arrange(desc(val_weight_grads)) |>
+  head(20)
+  
+  
+## Correlation
+M_rho <- read_parquet('../data_dme/ADHReplicates_hzg/vnn/models/vnn/version_4/63dde66321_eval_rho_nodewise_val.parquet')
+M_rho <- M_rho |> drop_na()
+
+M_rho <- left_join(
+  M_rho, 
+  rename(distinct(select(M_gwb, layer, k)), node = k)
+)
+
+M_rho <- M_rho |>
+  mutate(absAdjADHSlope = abs(AdjADHSlope))
+
+ggplot(data = M_rho, aes(x = layer, y = absAdjADHSlope))+
+  geom_violin(aes(group = layer))+
+  geom_point(data = filter(M_rho, layer > 0))
+
+
+M_rho |> 
+  select(layer, node_forward_idx, node, absAdjADHSlope) |>
+  group_by(node) |>
+  mutate(absAdjADHSlope = max(absAdjADHSlope)) |>
+  distinct() |>
+  ungroup() |>
+  mutate(qthresh = quantile(absAdjADHSlope, .99)) |>
+  filter(absAdjADHSlope >= qthresh) |>
+  select(-qthresh) |>
+  arrange(desc(absAdjADHSlope))
+  
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Metrics
+
+```{r}
+metrics <- read_parquet('./metrics.parquet')
+
+# annotate metrics with the best trial col
+metrics <- metrics |> 
+  separate(version, c(NA, "trial_index")) |>
+  mutate(trial_index = as.numeric(trial_index)) |>
+  full_join(
+    rbind(
+      select(hvnn, exp, phn, model, phase, trial_index, best_trial),
+      select(hdnn, exp, phn, model, phase, trial_index, best_trial)
+    )
+  ) |>
+  mutate(best_trial = case_when(best_trial == TRUE ~ TRUE, 
+                                TRUE ~ FALSE))
+
+
+# update naming slightly:
+metrics <- metrics |>
+  filter(!is.na(split)) |>
+  mutate(split = case_when(split == 'train' ~ 'Train', 
+                           split == 'val' ~ 'Validation'),
+         model = case_when(model == 'vnn' ~ 'VNN', 
+                           model == 'dnn' ~ 'DNN')
+  )
+
+
+tmp <- metrics |>
+  filter(
+    exp == 'data_dme',
+    phn == 'ADHReplicates_hzg',
+    # phase == 'lightning'
+    # phase == 'models'
+    # model == 'vnn',
+    # phase == 'models',
+    # split == 'train',
+  ) |>
+  mutate(phase = case_when(
+    phase == 'lightning' ~ 'Tuning', 
+    phase == 'models' ~ 'Training'
+    )) |>
+  mutate(phase = factor(
+    phase, 
+    levels = c('Tuning', 'Training')
+    )) |>
+  
+  group_by(exp, phn, model, phase, split, trial_index, epoch) |>
+  mutate(loss = mean(loss)) |>
+  select(-step) |>
+  distinct()
+
+ggplot(
+  filter(tmp, best_trial == FALSE #& model == 'VNN'
+  ), 
+  aes(x = epoch, y = loss, group = trial_index ))+
+  geom_line(aes(color=best_trial), color = '#99999955')+
+  geom_line(data = filter(tmp, best_trial == TRUE), color = 'red')+
+  scale_y_log10()+
+  # scale_y_continuous(guide = 'axis_nested')
+  theme_minimal()+
+  facet_nested(~ model + phase + split , nest_line = element_line(linetype = 1))+
+  theme(panel.background = element_rect(fill = "white", colour = NA), axis.ticks = element_line(colour = 'gray'))
+
+
+
+
+
+plot_history <- function(
+    metrics, 
+    exp = 'data_dme',
+    phn = 'ADHReplicates_hzg'
+){
+  mask <- (
+    (metrics$exp == exp) &
+      (metrics$phn == phn)
+  )
+  
+  tmp <- metrics[mask, ] |>
+    mutate(phase = case_when(
+      phase == 'lightning' ~ 'Tuning', 
+      phase == 'models' ~ 'Training'
+    )) |>
+    mutate(phase = factor(
+      phase, 
+      levels = c('Tuning', 'Training')
+    )) |>
+    group_by(exp, phn, model, phase, split, trial_index, epoch) |>
+    mutate(loss = mean(loss)) |>
+    select(-step) |>
+    distinct()
+  
+  plt <- ggplot(
+    filter(tmp, best_trial == FALSE #& model == 'VNN'
+    ), 
+    aes(x = epoch, y = loss, group = trial_index ))+
+    geom_line(aes(color=best_trial), color = '#99999955')+
+    geom_line(data = filter(tmp, best_trial == TRUE), color = 'red')+
+    scale_y_log10()+
+    # scale_y_continuous(guide = 'axis_nested')
+    labs(x = 'Epoch', y = 'Loss (MSE)', title = paste0(exp, ': ', phn))+
+    theme_minimal()+
+    facet_nested(~ model + phase + split , nest_line = element_line(linetype = 1))+
+    theme(panel.background = element_rect(fill = "white", colour = NA), axis.ticks = element_line(colour = 'gray'))
+  
+  return(plt)
+}
+
+
+
+plot_history(
+    metrics, 
+    exp = 'data_dme',
+    phn = 'ADHReplicates_hzg'
+)
+
+# not expand grid but eg
+eg <- metrics |> select(exp, phn) |> distinct()
+
+plt_lst <- map(1:nrow(eg), function(i){
+  plot_history(
+    metrics, 
+    exp = as.character(eg[i, 'exp']),
+    phn = as.character(eg[i, 'phn'])
+    )
+})
+
+
+
+
+p <- plt_lst
 design <- "
 ABCD
 EFGH
 "
 
 p[[1]]+p[[2]]+p[[3]]+p[[4]]+p[[5]]+p[[6]]+p[[7]]+p[[8]]+plot_layout(design = design)
+
+
+# overall  -- gmx looks really bad. The others have some that are okay 
+
+
 ```
+
+
+
+
+```{r}
+# there seem to be more than one record for some but not all taxa. 
+
+vnn <- read_parquet('./yhat_vnn.parquet')
+vnn |> 
+  filter(
+    version=='version_0',
+    data_hash=='235ec0e852',
+    split=='train',
+    taxa=='LD00_3309'
+  ) |> 
+  select(yhat) |>
+  summarise(yhat_sd = sd(yhat))
+
+xx <- vnn |> 
+  distinct() |>
+  group_by(exp, phn, model, phase, version, data_hash, split, taxa) |>
+  summarise(
+    yhat = yhat,
+    yhat_sd = sd(yhat)
+    ) |>
+  filter(!is.na(yhat_sd))
+
+xx |> 
+  mutate(frac = yhat_sd/yhat) |> 
+  # select(-yhat) |> 
+  arrange(desc(frac))
+```
+
+
+
+
+
+
+```{r}
+# let's focus on a single experiment
+# "premature optimization is the root of all evil"
+
+
+# more flexible version
+base_path <- '../data_zma/phno_all_Yield_Mg_ha__FTaxaREnvRGxE/vnn/models/vnn/version_0/'
+
+base_path <- '../data_zma/phno_all_Yield_Mg_ha__FTaxaREnvRGxE/dnn/models/dnn/version_0/'
+
+
+
+get_model_yhats <- function(base_path = '../data_zma/phno_all_Yield_Mg_ha__FTaxaREnvRGxE/dnn/models/dnn/version_0/'){
+  tmp <- list.files(base_path)
+  if(str_detect(base_path, '/lin/')){
+    #TODO add functionality for linear model handeling here
+    
+  }else{
+    yvar_cs_center <- read_parquet(paste0(base_path, tmp[str_detect(string = tmp, pattern = '.+yvar_cs_center.parquet$')] ))
+    yvar_cs_scale  <- read_parquet(paste0(base_path, tmp[str_detect(string = tmp, pattern = '.+yvar_cs_scale.parquet$')] ))
+    
+    yvar_cs_trn    <- read_parquet(paste0(base_path, tmp[str_detect(string = tmp, pattern = '.+yvar_cs_trn.parquet$')] ))
+    yvar_cs_val    <- read_parquet(paste0(base_path, tmp[str_detect(string = tmp, pattern = '.+yvar_cs_val.parquet$')] ))
+    
+    yhat_cs_trn    <- read_parquet(paste0(base_path, tmp[str_detect(string = tmp, pattern = '.+yhat_cs_trn.parquet$')] ))
+    yhat_cs_val    <- read_parquet(paste0(base_path, tmp[str_detect(string = tmp, pattern = '.+yhat_cs_val.parquet$')] ))
+    
+    return(
+      list(
+        yvar_cs_center=yvar_cs_center,
+        yvar_cs_scale=yvar_cs_scale,
+        
+        yvar_cs_trn=yvar_cs_trn,
+        yvar_cs_val=yvar_cs_val,
+        
+        yhat_cs_trn=yhat_cs_trn,
+        yhat_cs_val=yhat_cs_val
+      ))
+  }
+}
+
+
+
+res <- get_model_yhats(base_path = '../data_zma/phno_all_Yield_Mg_ha__FTaxaREnvRGxE/dnn/models/dnn/version_0/')
+res <- get_model_yhats(base_path = '../data_zma/phno_all_Yield_Mg_ha__FTaxaREnvRGxE/vnn/models/vnn/version_0/')
+
+
+
+yvar_cs_center <- res$yvar_cs_center
+yvar_cs_scale  <- res$yvar_cs_scale
+yvar_cs_trn    <- res$yvar_cs_trn
+yvar_cs_val    <- res$yvar_cs_val
+yhat_cs_trn    <- res$yhat_cs_trn
+yhat_cs_val    <- res$yhat_cs_val
+
+
+full_join(
+  rename(yvar_cs_val, obsv = Yield_Mg_ha),
+  rename(yhat_cs_val, yhat = Yield_Mg_ha)
+)|> 
+  ggplot(aes(obsv, yhat))+
+  geom_point()+
+  geom_smooth(method = 'lm')+
+  geom_abline()
+
+
+# do all vnns trained have this weird floor/ceil effect?
+
+
+vnn_paths <- paste0(
+  # '../data_zma/phno_all_Yield_Mg_ha__FTaxaREnvRGxE/vnn/models/vnn/version_', # yes
+  # '../data_zma/phno_all_Yield_Mg_ha__IAH3_2021/vnn/models/vnn/version_', # can't say. Testing set is like 3 points. (should be more yes?)
+  
+  # '../data_zma/phno_all_Pollen_GDD__FTaxaREnvRGxE/vnn/models/vnn/version_', # two modes
+  # '../data_zma/phno_all_Pollen_GDD__WIH2_2020/vnn/models/vnn/version_', # few to tell
+  
+  # '../data_gmx/phno_OilDry/vnn/models/vnn/version_', # spread but definite banding
+  # '../data_gmx/phno_ProteinDry/vnn/models/vnn/version_', #
+  # '../data_gmx/phno_StachyoseDry/vnn/models/vnn/version_', #
+  
+  
+  
+  
+  # '../data_zma/phno_all_Yield_Mg_ha__FTaxaREnvRGxE/dnn/models/dnn/version_',
+  # '../data_zma/phno_all_Yield_Mg_ha__IAH3_2021/dnn/models/dnn/version_',
+  
+  # '../data_zma/phno_all_Pollen_GDD__FTaxaREnvRGxE/dnn/models/dnn/version_',
+  # '../data_zma/phno_all_Pollen_GDD__WIH2_2020/dnn/models/dnn/version_',
+  
+  # '../data_gmx/phno_OilDry/dnn/models/dnn/version_',
+  # '../data_gmx/phno_ProteinDry/dnn/models/dnn/version_',
+  '../data_gmx/phno_StachyoseDry/dnn/models/dnn/version_',
+  
+  c(0, 1, 2, 3, 4), '/')
+
+plts <- list()
+for(pth in vnn_paths){
+  res <- get_model_yhats(base_path = pth)
+  
+  yvar_cs_val    <- res$yvar_cs_val
+  yhat_cs_val    <- res$yhat_cs_val
+  
+  names(yvar_cs_val) <- c("obsv", "Split", "Phno_Idx", "Taxa")
+  names(yhat_cs_val) <- c("yhat", "Split", "Phno_Idx", "Taxa")
+  
+  x <- full_join(
+    yvar_cs_val,
+    yhat_cs_val
+    # rename(yvar_cs_val, obsv = Yield_Mg_ha),
+    # rename(yhat_cs_val, yhat = Yield_Mg_ha)
+  )
+  plt <- ggplot(x, aes(obsv, yhat))+
+    geom_point()+
+    geom_smooth(method = 'lm')+
+    geom_abline()  
+  plts[[length(plts)+1]] <- plt
+}
+
+plts[[1]]+plts[[2]]+plts[[3]]+plts[[4]]+plts[[5]]+plot_layout(design = "ABCDE")
+```
+
+
+
+
+
+
+
+
+```{r}
+# contrast performances
+
+# Let's focus on a single one of these models: 
+# exp == "data_dme" & phn == "ADHReplicates_hzg"
+
+
+vnn <- read_parquet('./yhat_vnn.parquet')
+dnn <- read_parquet('./yhat_dnn.parquet')
+lin <- read_parquet('./yhat_lin.parquet')
+
+vnn |> 
+  distinct() |>
+  group_by(exp, phn, model, phase, version, data_hash, split, taxa) |>
+  tally() |>
+  filter(n >1 )
+
+
+
+
+lin |> filter(
+  exp   == 'data_dme',
+  phn   == 'ADHReplicates_hzg') |>
+  select(data_hash) |> distinct()
+
+
+
+
+  
+
+f <- (function (x) x |> 
+        filter(
+          exp   == 'data_dme',
+          phn   == 'ADHReplicates_hzg', 
+          data_hash == '5540f41c30'
+          )
+      )
+
+vnn <- vnn |> f()
+dnn <- dnn |> f()
+lin <- lin |> f()
+
+vnn <- vnn |> select(exp, phn, phase, data_hash, split, taxa, yhat) |>      rename(vnn = yhat) |> distinct()
+dnn <- dnn |> select(exp, phn, phase, data_hash, split, taxa, yhat) |>      rename(dnn = yhat) |> distinct()
+lin <- lin |> select(exp, phn, phase, data_hash, split, taxa, obs, yhat) |> rename(lin = yhat) |> distinct()
+
+
+# this is really curious. It seems like there are predictions that are offset by one between the taxa...
+# > vnn |> arrange(split, taxa)
+# # A tibble: 3,318 × 7
+#    exp      phn               phase  data_hash  split taxa         vnn
+#    <chr>    <chr>             <chr>  <chr>      <chr> <chr>      <dbl>
+#  1 data_dme ADHReplicates_hzg models 5540f41c30 test  11022 -0.0000463
+#  2 data_dme ADHReplicates_hzg models 5540f41c30 test  11022 -0.0000548
+#  3 data_dme ADHReplicates_hzg models 5540f41c30 test  11023 -0.0000548
+#  4 data_dme ADHReplicates_hzg models 5540f41c30 test  11023 -0.0000491
+#  5 data_dme ADHReplicates_hzg models 5540f41c30 test  11037 -0.0000491
+#  6 data_dme ADHReplicates_hzg models 5540f41c30 test  11037 -0.0000462
+#  7 data_dme ADHReplicates_hzg models 5540f41c30 test  11044 -0.0000462
+#  8 data_dme ADHReplicates_hzg models 5540f41c30 test  11044 -0.0000443
+#  9 data_dme ADHReplicates_hzg models 5540f41c30 test  11049 -0.000044
+
+
+vnn |> group_by(exp, phn, phase, data_hash, split, taxa) |> tally()
+
+
+
+full_join(lin, vnn)
+
+
+
+full_join(
+  (lin |> select(-obs) |> distinct()),
+  vnn
+)
+
+
+
+
+```
+
+
+
+
+
+
+```{r}
+
+list.files('../data_gmx/phno_OilDry/vnn/models/vnn/version_0/')
+list.files('../data_gmx/phno_OilDry/lin/models/blup/')
+
+
+
+
+
+M <- read.csv('../data_gmx/phno_OilDry/vnn/models/vnn/version_0/metrics.csv')
+
+
+ggplot()+
+  geom_line(data = filter(select(M, step, train_loss), !is.na(train_loss)), 
+            aes(x = step, y = train_loss))+
+    geom_line(data = filter(select(M, step, val_loss), !is.na(val_loss)), 
+            aes(x = step, y = val_loss), color = 'red')
+
+
+
+read_parquet('../data_gmx/phno_OilDry/vnn/models/vnn/version_0/235ec0e852_yhat_trn.parquet')
+read_parquet('../data_gmx/phno_OilDry/vnn/models/vnn/version_0/235ec0e852_yhat_val.parquet')
+
+
+read_parquet('../data_gmx/phno_OilDry/lin/models/blup/15a0fac8d9_bWGR_b.parquet')
+read_parquet('../data_gmx/phno_OilDry/lin/models/blup/15a0fac8d9_bWGR_mu.parquet')
+read_parquet('../data_gmx/phno_OilDry/lin/models/blup/15a0fac8d9_bWGR_cxx.parquet')
+read_parquet('../data_gmx/phno_OilDry/lin/models/blup/15a0fac8d9_bWGR_d.parquet')
+read_parquet('../data_gmx/phno_OilDry/lin/models/blup/15a0fac8d9_bWGR_Vb.parquet')
+read_parquet('../data_gmx/phno_OilDry/lin/models/blup/15a0fac8d9_bWGR_Ve.parquet')
+
+```
+
+
+
+```{r}
+vnn <- read_parquet('./yhat_vnn.parquet')
+dnn <- read_parquet('./yhat_dnn.parquet')
+lin <- read_parquet('./yhat_lin.parquet')
+
+# which have evidence of failed training? (sd == 0)
+
+vnn |>
+  group_by(exp, phn, model, phase, version, data_hash, split) |>
+  summarise(sd = sd(yhat)) |>
+  arrange(sd) |>
+  # arrange(desc(sd)) |>
+  print(n=40)
+
+dnn |>
+  group_by(exp, phn, model, phase, version, data_hash, split) |>
+  summarise(sd = sd(yhat)) |>
+  arrange(desc(sd))
+  
+  print(n=60)
+
+lin |>
+  group_by(exp, phn, model, phase, version, data_hash, split) |>
+  summarise(sd = sd(yhat)) |>
+  print(n=40)
+
+
+
+f <- (function (x) x |> 
+        filter(
+          exp   == 'data_gmx',
+          phn   == 'phno_OilDry', 
+          data_hash == '1ebb200b12'
+          )
+      )
+
+vnn <- vnn |> f()
+dnn <- dnn |> f()
+lin <- lin |> f()
+
+vnn <- vnn |> select(exp, phn, phase, data_hash, split, taxa, yhat) |>      rename(vnn = yhat) |> distinct()
+dnn <- dnn |> select(exp, phn, phase, data_hash, split, taxa, yhat) |>      rename(dnn = yhat) |> distinct()
+lin <- lin |> select(exp, phn, phase, data_hash, split, taxa, obs, yhat) |> rename(lin = yhat) |> distinct()
+
+
+# lin contains the observations so vnn and dnn are 1:1 and both are 1:many with lin
+# dnn |> distinct() |> group_by(exp, phn, phase, data_hash, split, taxa) |> tally() |> filter(n != 1)
+
+# TODO pseudoreplicates? 
+# # A tibble: 30 × 9
+#    exp      phn             model phase  version   data_hash   yhat split taxa     
+#    <chr>    <chr>           <chr> <chr>  <chr>     <chr>      <dbl> <chr> <chr>    
+#  1 data_gmx phno_ProteinDry dnn   models version_4 361ee2ff57  45.0 train LD00_3309
+#  2 data_gmx phno_ProteinDry dnn   models version_4 361ee2ff57  43.0 train LD00_3309
+#  3 data_gmx phno_ProteinDry dnn   models version_3 7c2d03c704  44.6 train LD00_3309
+#  4 data_gmx phno_ProteinDry dnn   models version_3 7c2d03c704  41.8 train LD00_3309
+# dnn |> filter(taxa == 'LD00_3309')
+
+
+
+M <- full_join(lin, full_join(vnn, dnn), relationship = 'many-to-many')
+
+
+M |> 
+  group_by(data_hash, split) |> 
+  summarise(
+    obs_vnn = cor(obs, vnn, use = 'pairwise.complete.obs'),
+    obs_dnn = cor(obs, dnn, use = 'pairwise.complete.obs'),
+    obs_lin = cor(obs, lin, use = 'pairwise.complete.obs')
+    )
+
+
+
+
+library(corrr)
+M |> 
+  group_by(data_hash) |>
+  select(obs, lin, vnn, dnn) |>
+  corrr::correlate()
+  
+
+
+
+
+vnn
+
+dnn
+ 
+lin
+
+
+
+left_join(
+  select(rename(vnn, vnn = yhat), -version),
+  select(rename(dnn, dnn = yhat), -version)
+) |> ggplot(
+  aes(x = vnn, y = dnn)
+)+geom_point()
+
+
+rename(lin, lin = yhat)
+
+
+
+vnn
+
+f(vnn)
+f(dnn)
+f(lin)
+
+
+vnn |>
+  filter(exp   == 'data_zma',
+         phn   == 'phno_all_Yield_Mg_ha__FTaxaREnvRGxE',
+         model == 'vnn',
+         phase == 'models'
+         # version == 'version_3'
+         ) |>
+  ggplot(aes(x = interaction(split, data_hash), y = data_hash))+
+  geom_point()
+  
+
+
+```
+
+
+```{r}
+vnn <- read_parquet('./yhat_vnn.parquet')
+dnn <- read_parquet('./yhat_dnn.parquet')
+lin <- read_parquet('./yhat_lin.parquet')
+
+
+# this shows what we don't yet have.
+do.call(
+  rbind, 
+  map(
+    list(vnn, dnn, lin), 
+    function(e){
+      distinct(select(e, exp, phn, model, phase, data_hash))
+      })
+  ) |>
+  mutate(exists = TRUE) |>
+    ggplot(aes(
+      x = model, 
+      y = interaction(
+        data_hash,
+        # phase,
+        phn,
+        exp),
+      fill = exists
+      ))+
+  geom_tile()+
+  theme_bw()+
+  scale_y_discrete(guide = "axis_nested")
+
+
+xl <- lin |> 
+  select(-model) |> 
+  select(-version) |> 
+  #   filter(
+  #   exp == 'data_gmx',
+  #   phn == 'phno_ProteinDry'
+  #   # data_hash == '656a758935'
+  # ) |>
+  rename(lin = yhat)
+
+xv <- vnn |> 
+  select(-model) |> 
+  select(-version) |> 
+  # filter(
+  #   exp == 'data_gmx',
+  #   phn == 'phno_ProteinDry'
+  #   # data_hash == '656a758935'
+  # ) |>
+  rename(vnn = yhat)
+
+xd <- dnn |> 
+  select(-model) |> 
+  select(-version) |> 
+  # filter(
+  #   exp == 'data_gmx',
+  #   phn == 'phno_ProteinDry'
+  #   # data_hash == '656a758935'
+  # ) |>
+  rename(dnn = yhat)
+
+
+xl$split |> unique()
+
+
+xd
+
+
+
+
+
+# TODO are testing values missing from the blups?
+# xl |>
+#   mutate(mse = (obs-lin)**2) |>
+#   group_by(data_hash) |>
+#   mutate(mse = mean(mse)) |>
+#   ungroup() |>
+#   ggplot(aes(x=data_hash, y = mse))+
+#   geom_boxplot()
+
+
+
+
+
+x <- full_join(full_join(xl, xv, relationship = "many-to-many"), xd, relationship = "many-to-many") 
+
+
+
+
+x |>
+  # filter(
+    # phn == "phno_ProteinDry"
+    # phn == "phno_StachyoseDry"
+    # phn == "phno_OilDry"
+    # phn == "phno_all_Pollen_GDD__FTaxaREnvRGxE"
+    # phn == "phno_all_Pollen_GDD__WIH2_2020"
+    # phn == "phno_all_Yield_Mg_ha__IAH3_2021"
+    # phn == "ADHReplicates_hzg"
+    # phn == "phno_all_Yield_Mg_ha__FTaxaREnvRGxE"
+  # ) |>
+  pivot_longer(cols = c('lin', 'vnn', 'dnn')) |>
+  mutate(value = (obs-value)**2) |>
+  # select(-obs) |>
+  group_by(exp, phn, phase, data_hash, split, name) |>
+  summarise(MSE = mean(value)) |>
+  ungroup() |>
+  ggplot(aes(x=interaction(split, name), y = MSE))+
+  geom_boxplot(aes(fill = interaction(split, name)), width=0.1)+
+  geom_point()+
+  # scale_y_log10()+
+  scale_x_discrete(guide = "axis_nested")+
+  # facet_wrap(.~ )
+  facet_nested(~ exp + phn , nest_line = element_line(linetype = 1), scales = 'free')+
+  labs(x = '')+
+  theme(
+    panel.background = element_rect(fill = "white", colour = NA), 
+    axis.ticks = element_line(colour = 'gray'),
+    legend.position = 'none'
+    )
+  
+
+
+x |>
+  filter(
+    # phn == "phno_ProteinDry"
+    # phn == "phno_StachyoseDry"
+    # phn == "phno_OilDry"
+    # phn == "phno_all_Pollen_GDD__FTaxaREnvRGxE"
+    # phn == "phno_all_Pollen_GDD__WIH2_2020"
+    # phn == "phno_all_Yield_Mg_ha__IAH3_2021"
+    # phn == "ADHReplicates_hzg"
+    # phn == "phno_all_Yield_Mg_ha__FTaxaREnvRGxE"
+  ) |>
+  pivot_longer(cols = c('lin', 'vnn', 'dnn')) |>
+  mutate(value = (obs-value)**2) |>
+  # select(-obs) |>
+  group_by(exp, phn, phase, data_hash, split, name) |>
+  summarise(MSE = mean(value)) |>
+  ungroup() |>
+  ggplot(aes(x=interaction(split, name), y = MSE))+
+  geom_boxplot(aes(fill = interaction(split, name)), width=0.1)+
+  geom_point()+
+  # scale_y_log10()+
+  scale_x_discrete(guide = "axis_nested")+
+  # facet_wrap(.~ )
+  facet_nested(~ exp + phn , nest_line = element_line(linetype = 1), scales = 'free')+
+  labs(x = '')+
+  theme(
+    panel.background = element_rect(fill = "white", colour = NA), 
+    axis.ticks = element_line(colour = 'gray'),
+    legend.position = 'none'
+    )
+  
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
