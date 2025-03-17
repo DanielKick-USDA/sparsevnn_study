@@ -89,59 +89,62 @@ def sparsevnn_lsuv(
             else:
                 # initialize each node separately but update them together. (because they all contribute to the output)
                 for node_inp_name in edge_dict[node_out_name]:
-                    node_inp_start, node_inp_stop, node_inp_size = [
-                        int(M_list[L].row_info[node_inp_name][e]) 
-                        for e in ['start', 'stop', 'size']
-                        ]
-                    
-                    # Create mask for the indices
-                    node_mask_indices = (
-                        # sufficient to get all the values involved in the output
-                        ((model.layer_list[L].indices[0] >= node_out_start) & (model.layer_list[L].indices[0] <  node_out_stop)) & 
-                        # required to pluck out individual block of values
-                        ((model.layer_list[L].indices[1] >= node_inp_start) & (model.layer_list[L].indices[1] <  node_inp_stop)) 
-                        )
-
-                    if node_mask_indices.sum() <= 2:
-                        # if there aren't enought values to do this with, just initialize with randn
-                        orth = torch.randn(
-                        node_out_size, 
-                        node_inp_size
-                        )
+                    if node_inp_name not in M_list[L].row_info:
+                        pass # entry exists that should have been qc'ed out. 
                     else:
-                        # for initialization we don't need the actual data, only the size of it.
-                        # see Zing Lee's comment https://stackoverflow.com/a/54307312
-                        # found from KFrank's post https://discuss.pytorch.org/t/how-to-efficiently-and-randomly-produce-an-orthonormal-matrix/153609
-                        gaus_mat = torch.randn(
+                        node_inp_start, node_inp_stop, node_inp_size = [
+                            int(M_list[L].row_info[node_inp_name][e]) 
+                            for e in ['start', 'stop', 'size']
+                            ]
+                        
+                        # Create mask for the indices
+                        node_mask_indices = (
+                            # sufficient to get all the values involved in the output
+                            ((model.layer_list[L].indices[0] >= node_out_start) & (model.layer_list[L].indices[0] <  node_out_stop)) & 
+                            # required to pluck out individual block of values
+                            ((model.layer_list[L].indices[1] >= node_inp_start) & (model.layer_list[L].indices[1] <  node_inp_stop)) 
+                            )
+
+                        if node_mask_indices.sum() <= 2:
+                            # if there aren't enought values to do this with, just initialize with randn
+                            orth = torch.randn(
                             node_out_size, 
                             node_inp_size
                             )
-
-                        u, s, vh = torch.linalg.svd(gaus_mat, full_matrices=False)
-                        orth = u @ vh 
-
-                    # overwrite the existing weights
-                    with torch.no_grad():
-                        if (node_mask_indices.sum() != orth.to_sparse().values().shape[0]):
-                            # There's a really odd thing here were in gmx phno OilDry exactly one node _should_ be size 200 but the 
-                            # mask returns 199 entries. Since it's only one, I'll write a warning and write around this. 
-                            # out node: '04131 Membrane trafficking [BR:gmx04131]'
-                            # in  node: '547838 luminal-binding protein 5	K09490 HSPA5; endoplasmic reticulum chaperone BiP [EC:3.6.4.10]'
-                            print('Warning! Mismatched size between mask and shape!')
-                            print(f"occured  layer: {L}")
-                            print(f"masked entries: {node_mask_indices.sum()}")
-                            print(f"expect entries: {orth.to_sparse().values().shape[0]}")
-                            print('Proceeding with subset based on mask.')
-                            end_slice = (orth.to_sparse().values().shape[0]-1)
-                            if model.layer_list[L].weights.device.type == 'cuda':
-                                model.layer_list[L].weights[node_mask_indices] = orth.to_sparse().values().to('cuda')[0:end_slice]
-                            else:
-                                model.layer_list[L].weights[node_mask_indices] = orth.to_sparse().values()[0:end_slice]
                         else:
-                            if model.layer_list[L].weights.device.type == 'cuda':
-                                model.layer_list[L].weights[node_mask_indices] = orth.to_sparse().values().to('cuda')
+                            # for initialization we don't need the actual data, only the size of it.
+                            # see Zing Lee's comment https://stackoverflow.com/a/54307312
+                            # found from KFrank's post https://discuss.pytorch.org/t/how-to-efficiently-and-randomly-produce-an-orthonormal-matrix/153609
+                            gaus_mat = torch.randn(
+                                node_out_size, 
+                                node_inp_size
+                                )
+
+                            u, s, vh = torch.linalg.svd(gaus_mat, full_matrices=False)
+                            orth = u @ vh 
+
+                        # overwrite the existing weights
+                        with torch.no_grad():
+                            if (node_mask_indices.sum() != orth.to_sparse().values().shape[0]):
+                                # There's a really odd thing here were in gmx phno OilDry exactly one node _should_ be size 200 but the 
+                                # mask returns 199 entries. Since it's only one, I'll write a warning and write around this. 
+                                # out node: '04131 Membrane trafficking [BR:gmx04131]'
+                                # in  node: '547838 luminal-binding protein 5	K09490 HSPA5; endoplasmic reticulum chaperone BiP [EC:3.6.4.10]'
+                                print('Warning! Mismatched size between mask and shape!')
+                                print(f"occured  layer: {L}")
+                                print(f"masked entries: {node_mask_indices.sum()}")
+                                print(f"expect entries: {orth.to_sparse().values().shape[0]}")
+                                print('Proceeding with subset based on mask.')
+                                end_slice = (orth.to_sparse().values().shape[0]-1)
+                                if model.layer_list[L].weights.device.type == 'cuda':
+                                    model.layer_list[L].weights[node_mask_indices] = orth.to_sparse().values().to('cuda')[0:end_slice]
+                                else:
+                                    model.layer_list[L].weights[node_mask_indices] = orth.to_sparse().values()[0:end_slice]
                             else:
-                                model.layer_list[L].weights[node_mask_indices] = orth.to_sparse().values()
+                                if model.layer_list[L].weights.device.type == 'cuda':
+                                    model.layer_list[L].weights[node_mask_indices] = orth.to_sparse().values().to('cuda')
+                                else:
+                                    model.layer_list[L].weights[node_mask_indices] = orth.to_sparse().values()
 
     if inp_dl.dataset.G.device.type == 'cuda':
         model = model.to('cuda')
