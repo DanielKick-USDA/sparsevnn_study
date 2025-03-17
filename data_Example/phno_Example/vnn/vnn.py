@@ -766,15 +766,9 @@ def train_one_model(
     if not (pr_uniq >= pr_uniq_threshold):
         print('Initialization condition not met. Consider modifying `pr_uniq_threshold`. Breaking.')
         # NOTE: this will break (intentionally). 
-        # assert(True == False)
-        # None[0] 
-        # per conversation with Jacob (25/01/16) if we don't meet the criteria in 100 tries we'll allow the model to run anyway. 
-        # The expectation is that the fit will be poor (in the worst case we'll fit an intercept model) resulting in 
-        # the hyperparameter set _underperforming_ the likely "true" performance (conditional on correct initialization).
-        # This in effect means the tuner is penalizing 1) poor performance and 2) difficulty of initialization. 
-        print('Proceeding anyway.') 
+        None[0] 
 
-    if True:
+    else:
         VNN        = plDNN_general(model)
         optimizer = VNN.configure_optimizers()
         logger    = CSVLogger(log_dir, name=exp_name)
@@ -905,14 +899,12 @@ match params_run['run_mode']: # setup tune train predict eval
         if run_trials_bool:
             for i in range(params_run['tune_trials']):
                 run_next_trial_bool = False
-                print(f"{ params_run['tune_max'] }") 
-                if type(None) != type(ax_client):
                 # At each step check if we have reached the maximum. This allows us to request extra trials in case initialization fails
+                if type(None) == type(ax_client.generation_strategy.trials_as_df):
                     run_next_trial_bool = True
-                    #print('a')
-                elif params_run['tune_max'] >= (ax_client.generation_strategy.trials_as_df.index.max()+1):
+                elif params_run['tune_max'] <= (ax_client.generation_strategy.trials_as_df.index.max()+1):
                     run_next_trial_bool = True
-                    
+
                 if run_next_trial_bool:
                     parameterization, trial_index = ax_client.get_next_trial()
                     # Local evaluation here can be replaced with deployment to external system.

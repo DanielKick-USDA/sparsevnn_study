@@ -12,6 +12,9 @@ tune_max_epoch=4
 
 sparsevnn_path='../../../containers/sparsevnn.sif'
 
+echo 'start at'
+date
+
 # results in params_data.json  params.json  params_list.json  params_run.json
 singularity exec --nv $sparsevnn_path python dnn.py \
         --run_mode setup                                              \
@@ -35,9 +38,11 @@ singularity exec --nv $sparsevnn_path python editholdouts.py \
     --action add \
     --attribute holdout_taxa_ignore
 
-# # date
 singularity exec --nv $sparsevnn_path python dnn.py \
     --run_mode tune         \
     --tune_trials $tune_trials \
     --tune_max $tune_max    \
     --max_epoch $tune_max_epoch  
+
+echo 'end at'
+date

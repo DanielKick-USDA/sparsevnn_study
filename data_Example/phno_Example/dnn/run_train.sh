@@ -6,9 +6,12 @@ hmp_path="$shared_data"'Example.hmp.txt'
 phno_path="$shared_data""$phno"'.csv'
 kmeans_path="$shared_data"'KMeans_taxa_holdouts.json'
 
-train_max_epoch=8
+train_max_epoch=64
 
 sparsevnn_path='../../../containers/sparsevnn.sif'
+
+echo 'start at'
+date
 
 singularity exec --nv $sparsevnn_path python editholdouts.py \
     --inp_fp $kmeans_path \
@@ -19,7 +22,8 @@ singularity exec --nv $sparsevnn_path python editholdouts.py \
 for i in {0..4};
 do
         # echo '-------------------------------------------------------------------------------'
-        # echo 'Beginning fold '$i
+    echo 'Beginning fold '$i
+    date
         # echo '-------------------------------------------------------------------------------'
         # edit settings files to remove previous fold
     singularity exec --nv $sparsevnn_path python editholdouts.py \
@@ -41,5 +45,8 @@ do
     singularity exec --nv $sparsevnn_path python dnn.py \
         --run_mode train \
         --train_from_ax True \
-        --max_epoch $train_max_epoch
+        --max_epoch $train_max_epoch    
 done
+
+echo 'done at'
+date
