@@ -1763,6 +1763,7 @@ all_tmp_alls <- map(xx$phn, function(e){
 
 
 all_tmp_all_plts <- map(seq_along(all_tmp_alls), function(i){
+      print(i)
   tmp_all <- all_tmp_alls[[i]]
   
 #   p_top <- tmp_all |>
@@ -1825,11 +1826,11 @@ all_tmp_all_plts <- map(seq_along(all_tmp_alls), function(i){
   p <- tmp_all |>
     ggplot(aes(x = init, y = mse, fill = split))+
     geom_hline(
-      yintercept = as.numeric(select(filter(tmp_best, split == 'Train'), mse)), 
+      yintercept = as.numeric( as.list(select(filter(tmp_best, split == 'Train'), mse))[[1]][[1]] ), 
       color = 'cornflowerblue', linetype = 'dashed'
     )+
     geom_hline(
-      yintercept = as.numeric(select(filter(tmp_best, split == 'Validation'), mse)),
+      yintercept = as.numeric( as.list(select(filter(tmp_best, split == 'Validation'), mse))[[1]][[1]] ),
       color = 'orange', linetype = 'dashed'
     )+
     geom_boxplot()+
@@ -2361,7 +2362,7 @@ tmp_fn2 <- function(out){
     labs(x = '', y = 'Pearson r')+
     theme_minimal()+
     theme(legend.position = 'bottom')
-  
+
   ## Spearman ====
   
   tmp_best <- left_join(
@@ -2439,7 +2440,7 @@ tmp_fn2 <- function(out){
 #     phase_i = 'models',
 #     phno_i = 'phno_all_Pollen_GDD__FTaxaREnvRGxE')
 
-
+e <- xx$phn[1]
 map(xx$phn, function(e){
   kegg <- case_when(
     e %in% c("ADHReplicates_hzg") ~ 'dme',
@@ -2476,15 +2477,68 @@ map(xx$phn, function(e){
     out_sum2,
     file = paste0('paper_1mods_8sumwide_', kegg,'-',e, '.csv')
   )  
-
+  
   # plot 
   p <- tmp_fn2(out)
+  p1 <- p[[1]]
+  p2 <- p[[2]]
   
-  ggsave(paste0('paper_1mods_5cor_data_', kegg,'-',e, '.svg'), p[[1]], width = 7, height = 7, units = 'in')
-  ggsave(paste0('paper_1mods_5cor_data_', kegg,'-',e, '.png'), p[[1]], width = 7, height = 7, units = 'in')
+  ggsave(paste0('paper_1mods_5cor_data_', kegg,'-',e, '.svg'), p1, width = 7, height = 7, units = 'in')
+  ggsave(paste0('paper_1mods_5cor_data_', kegg,'-',e, '.png'), p1, width = 7, height = 7, units = 'in')
   
-  ggsave(paste0('paper_1mods_6rho_data_', kegg,'-',e, '.svg'), p[[2]], width = 7, height = 7, units = 'in')
-  ggsave(paste0('paper_1mods_6rho_data_', kegg,'-',e, '.png'), p[[2]], width = 7, height = 7, units = 'in')
+  ggsave(paste0('paper_1mods_6rho_data_', kegg,'-',e, '.svg'), p2, width = 7, height = 7, units = 'in')
+  ggsave(paste0('paper_1mods_6rho_data_', kegg,'-',e, '.png'), p2, width = 7, height = 7, units = 'in')
+  
+  
+  # add text per Jason's recommendation
+  p1 <- p1+geom_text(
+    data = (out |> 
+              group_by(data, model, split, init) |>
+              mutate(pearson = min(pearson)) |>
+              ungroup() |>
+              select(init, split, pearson) |>
+              distinct() |>
+              mutate(init_num = as.numeric(init))  |>
+              mutate(init_num = case_when(
+                split == 'Train' ~ (init_num - (0.751/4)),
+                split != 'Train' ~ (init_num + (0.751/4))
+              ))), 
+    aes(x = init_num, 
+        y = pearson-0.03, 
+        label = round(pearson, 3)#,
+        # color = split
+    )
+    # color = 'darkgray'
+  )
+  
+  p2 <- p2+geom_text(
+    data = (out |> 
+              group_by(data, model, split, init) |>
+              mutate(spearman = min(spearman)) |>
+              ungroup() |>
+              select(init, split, spearman) |>
+              distinct() |>
+              mutate(init_num = as.numeric(init))  |>
+              mutate(init_num = case_when(
+                split == 'Train' ~ (init_num - (0.751/4)),
+                split != 'Train' ~ (init_num + (0.751/4))
+              ))), 
+    aes(x = init_num, 
+        y = spearman-0.03, 
+        label = round(spearman, 3)#,
+        # color = split
+    )
+    # color = 'darkgray'
+  )
+  
+  
+  ggsave(paste0('paper_1mods_5corT_data_', kegg,'-',e, '.svg'), p1, width = 7, height = 7, units = 'in')
+  ggsave(paste0('paper_1mods_5corT_data_', kegg,'-',e, '.png'), p1, width = 7, height = 7, units = 'in')
+  
+  ggsave(paste0('paper_1mods_6rhoT_data_', kegg,'-',e, '.svg'), p2, width = 7, height = 7, units = 'in')
+  ggsave(paste0('paper_1mods_6rhoT_data_', kegg,'-',e, '.png'), p2, width = 7, height = 7, units = 'in')
+  
+  
   
 })
 
@@ -2493,8 +2547,129 @@ map(xx$phn, function(e){
 
 
 
+```
+
+
+
+
+```{r}
+# all in one heatmap per conversation with Jason
+
+out_hmp <- map(xx$phn, function(e){
+  kegg <- case_when(
+    e %in% c("ADHReplicates_hzg") ~ 'dme',
+    e %in% c("phno_ProteinDry", "phno_StachyoseDry", "phno_OilDry") ~ 'gmx',
+    e %in% c("phno_all_Pollen_GDD__FTaxaREnvRGxE", "phno_all_Yield_Mg_ha__FTaxaREnvRGxE", "phno_all_Yield_Mg_ha") ~ 'zma'
+  )
+  print(e)
+  out <- tmp_fn(md = md, phase_i = 'models', phno_i = e) |> 
+    mutate(phno = e)
+  return(out)
+  })
+
+
+out_hmp <- do.call(rbind, out_hmp)
+
+
+out_hmp_mse <- out_hmp |>
+  group_by(init, phno, split) |>
+  summarise(MSE = median(MSE, na.rm=TRUE)) |>
+  filter(!is.na(init), phno != 'phno_all_Yield_Mg_ha') |>
+  ungroup() |>
+  group_by(phno) |>
+  mutate(col_var = log10(MSE / max(MSE))
+         ) |>
+  ggplot(aes(x = interaction(split, init), y = phno, fill = col_var))+
+  geom_tile()+
+  geom_text(aes(label = round(MSE, digits = 3)))+
+  scale_x_discrete(guide = 'axis_nested')+
+  scale_fill_distiller()+
+  labs(x = '', y ='', title = 'Median MSE')+
+  theme(legend.position = '')
+
+
+ggsave(paste0('paper_1mods_8htmpmse_data.svg'), out_hmp_mse, width = 11, height = 7, units = 'in')
+ggsave(paste0('paper_1mods_8htmpmse_data.png'), out_hmp_mse, width = 11, height = 7, units = 'in')
+
+write.csv(
+  (out_hmp |>
+     group_by(init, phno, split) |>
+     summarise(MSE = median(MSE, na.rm=TRUE)) |>
+     filter(!is.na(init), phno != 'phno_all_Yield_Mg_ha') |>
+     ungroup() |>
+     pivot_wider(names_from = split, values_from = MSE, names_prefix = 'MSE_') |>
+     arrange(phno, init)),
+  file = paste0('paper_1mods_8htmpmse_data.csv')
+)  
+
+
+out_hmp_cor <- out_hmp |>
+  group_by(init, phno, split) |>
+  summarise(pearson = median(pearson, na.rm=TRUE)) |>
+  filter(!is.na(init), phno != 'phno_all_Yield_Mg_ha') |>
+  ungroup() |>
+  group_by(phno) |>
+  mutate(col_var = pearson) |>
+  ggplot(aes(x = interaction(split, init), y = phno, fill = col_var))+
+  geom_tile()+
+  geom_text(aes(label = round(pearson, digits = 3)))+
+  scale_x_discrete(guide = 'axis_nested')+
+  scale_fill_distiller()+
+  labs(x = '', y ='', title = 'Median Pearson r')+
+  theme(legend.position = '')
+
+ggsave(paste0('paper_1mods_9htmpcor_data.svg'), out_hmp_cor, width = 11, height = 7, units = 'in')
+ggsave(paste0('paper_1mods_9htmpcor_data.png'), out_hmp_cor, width = 11, height = 7, units = 'in')
+
+
+write.csv(
+  (out_hmp |>
+     group_by(init, phno, split) |>
+     summarise(pearson = median(pearson, na.rm=TRUE)) |>
+     filter(!is.na(init), phno != 'phno_all_Yield_Mg_ha') |>
+     ungroup() |>
+     pivot_wider(names_from = split, values_from = pearson, names_prefix = 'pearson_') |>
+     arrange(phno, init)),
+  file = paste0('paper_1mods_8htmpcor_data.csv')
+)  
+
+
+out_hmp_rho <- out_hmp |>
+  group_by(init, phno, split) |>
+  summarise(spearman = median(spearman, na.rm=TRUE)) |>
+  filter(!is.na(init), phno != 'phno_all_Yield_Mg_ha') |>
+  ungroup() |>
+  group_by(phno) |>
+  mutate(col_var = spearman) |>
+  ggplot(aes(x = interaction(split, init), y = phno, fill = col_var))+
+  geom_tile()+
+  geom_text(aes(label = round(spearman, digits = 3)))+
+  scale_x_discrete(guide = 'axis_nested')+
+  scale_fill_distiller()+
+  labs(x = '', y ='', title = 'Median Spearman ρ')+
+  theme(legend.position = '')
+
+
+ggsave(paste0('paper_1mods_10htmprho_data.svg'), out_hmp_rho, width = 11, height = 7, units = 'in')
+ggsave(paste0('paper_1mods_10htmprho_data.png'), out_hmp_rho, width = 11, height = 7, units = 'in')
+
+
+write.csv(
+  (out_hmp |>
+     group_by(init, phno, split) |>
+     summarise(spearman = median(spearman, na.rm=TRUE)) |>
+     filter(!is.na(init), phno != 'phno_all_Yield_Mg_ha') |>
+     ungroup() |>
+     pivot_wider(names_from = split, values_from = spearman, names_prefix = 'spearman_') |>
+     arrange(phno, init)),
+  file = paste0('paper_1mods_8htmprho_data.csv')
+)  
+
+  # facet_nested(~ model + phase + split , nest_line = element_line(linetype = 1))
+
 
 ```
+
 
 
 ```{r}
@@ -2505,150 +2680,586 @@ stop here
 
 
 ```{r}
-mse_summary_dnn <- out |>
-  filter(model != 'lin') |>
-  mutate(obs_rmcs =( (obs_cs * yvar_sd) + yvar_mu)) |>
-  mutate(SE = (obs_rmcs - yhat)**2 ) |>
-  group_by(model, data, hash, split) |>
-  filter(!is.na(SE)) |>
-  summarise(MSE = mean(SE))
+# getting gwas information 
 
+# phno_all_Pollen_GDD__FTaxaREnv__5_Genotype_Data_All_Years_vals_loci
+# phno_all_Pollen_GDD__FTaxaREnv__5_Genotype_Data_All_Years_acgt
 
-M <- rbind(mse_summary_lin, mse_summary_dnn)
+f = 'phno_all_Pollen_GDD__FTaxaREnv__5_Genotype_Data_All_Years_acgt'
+f = 'phno_all_Pollen_GDD__FTaxaREnv__5_Genotype_Data_All_Years_vals_loci'
 
-M |> 
-  ggplot(aes(x = interaction(model, data), y = MSE, color = split))+
-  geom_boxplot()+
-  geom_point()+
-  scale_y_log10()
+gwas <- read.csv(paste0(
+  '/home/daniel.kick/daniel/sparsevnn_study/zma_g2f_individual_gapit/output/',
+  f,
+  '/GAPIT.Association.GWAS_Results.CMLM.Pollen_GDD.csv'
+  ))
 
-
-tmp_all <- M |> 
-  mutate(init = case_when(
-    interaction(model, data) == "lin.data_zma" ~ "BLUP",
-    interaction(model, data) == "vnn.data_zma" ~ "VNN Tanh",
-    interaction(model, data) == "dnn.data_zma" ~ "DNN Tanh",
-    interaction(model, data) == "vnn.data_zma_lsuv_relu" ~ "VNN Relu LSUV",
-    interaction(model, data) == "vnn.data_zma_lsuv_tanh" ~ "VNN Tanh LSUV",
-    interaction(model, data) == "vnn.data_zma_lsuv_vlin" ~ "VLN LSUV"
-  )) |>
-  mutate(init = factor(
-    init, 
-    c("BLUP", "DNN Tanh", "VNN Tanh", "VNN Tanh LSUV", "VNN Relu LSUV", "VLN LSUV") 
-  ))  |>
-  mutate(
-    split = case_when(
-      split == 'trn' ~ 'Train', 
-      split == 'val' ~ 'Validation'
-      )) |>
-  rename(mse = MSE)
+gwas
 
 
 
-tmp_all
+mds <- md |>
+  filter(
+    phno == 'phno_all_Pollen_GDD__FTaxaREnvRGxE', 
+    phase == 'models'
+    ) 
 
-p <- tmp_all |> 
-  ggplot(aes(x = init, y = mse, fill = split))+
-  geom_boxplot()+
-  geom_point(position = position_dodge(width=0.751) )+
-  scale_fill_manual(values = c('cornflowerblue', 'orange') )+
-  labs(x = '', y = '')+
-  theme_minimal()+
-  # theme(axis.text.x = element_blank())+
-  theme(legend.position = 'none')
-  # coord_cartesian(ylim = c(0, 100))
-  # scale_y_log10()
+mds <- full_join(
+  (mds |> 
+     filter(
+    model == 'vnn', 
+    data  == 'data_zma_lsuv_tanh',
+    info  == 'eval_salience_snpwise_val'
+  ) |>
+    select(path, hash) |>
+    rename(vnn_lsuv_tanh = path)),
+  
+  (mds |> filter(
+    model == 'dnn', 
+    data  == 'data_zma',
+    info  == 'eval_salience_snpwise_val'
+  ) |>
+    select(path, hash) |>
+    rename(dnn_tanh = path))
+)
 
 
-p+scale_y_log10()
+## How correlated is everything?
 
-p+coord_cartesian(ylim = c(6975,7000))
+cor_all <- map(seq(1, nrow(mds)), function(i){
+  
+  vwas <- read_parquet(as.character(mds[i, 'vnn_lsuv_tanh']))
+  dwas <- read_parquet(as.character(mds[i, 'dnn_tanh']))
+  
+  tmp <- inner_join(
+    full_join(
+      rename(vwas, vsal = salience),
+      rename(dwas, dsal = salience)
+      ), 
+    (gwas |> 
+       as_tibble() |> 
+       select(Chr, Pos, P.value) |>
+       rename(
+         chrom = Chr,
+         pos = Pos,
+         p = P.value
+       ) |>
+       mutate(chrom = as.character(chrom))
+    )
+  )
+  
+  
+  cor(tmp$p, tmp$dsal, method = 'pearson')
+  cor(tmp$p, tmp$dsal, method = 'spearman')
+  tmp <- tmp |>
+    select(vsal, dsal, p) 
+  
+  tmp_s <- tmp |>
+    corrr::correlate(method = 'spearman') |> 
+    corrr::shave() |>
+    pivot_longer(cols = c('vsal', 'dsal', 'p')) |>
+    filter(!is.na(value)) |>
+    rename(spearman = value) |>
+    mutate(hash = as.character(mds[i, 'hash']))
+  
+  tmp_p <- tmp |>
+    corrr::correlate(method = 'pearson') |> 
+    corrr::shave() |>
+    pivot_longer(cols = c('vsal', 'dsal', 'p')) |>
+    filter(!is.na(value)) |>
+    rename(pearson = value) |>
+    mutate(hash = as.character(mds[i, 'hash']))
+  
+  return(full_join(tmp_s, tmp_p))
+  
+})
 
-p+coord_cartesian(ylim = c(5000,7000))
+cor_all <- do.call(rbind, cor_all)
 
 
+cor_all_spearman_sum <- cor_all |> 
+  select(-pearson) |>
+  mutate(nom = paste(term, name, sep = ' vs ')) |>
+  select(nom, spearman, hash) |>
+  pivot_wider(names_from = nom, values_from = spearman)
 
 
+write.csv(
+  cor_all_spearman_sum,
+  file = paste0('paper_1mods_11gwas_sal_spearman.csv')
+)  
 
-p_top <- tmp_all |> 
-  ggplot(aes(x = init, y = mse, fill = split))+
-  geom_boxplot()+
-  geom_point(position = position_dodge(width=0.751) )+
-  scale_fill_manual(values = c('cornflowerblue', 'orange') )+
-  labs(x = '', y = '')+
-  theme_minimal()+
-  theme(axis.text.x = element_blank())+
-  theme(legend.position = 'none')+
-  coord_cartesian(ylim = c(10, 4100))+
-  scale_y_log10()
+cor_all_pearson_sum <- cor_all |> 
+  select(-pearson) |>
+  mutate(nom = paste(term, name, sep = ' vs ')) |>
+  select(nom, spearman, hash) |>
+  pivot_wider(names_from = nom, values_from = spearman)
 
-p_bot <- tmp_all |> 
-  ggplot(aes(x = init, y = mse, fill = split))+
-  geom_boxplot()+
-  geom_point(position = position_dodge(width=0.751) )+
-  scale_fill_manual(values = c('cornflowerblue', 'orange') )+
-  labs(x = '', y = 'MSE')+
-  theme_minimal()+
-  theme(legend.position = 'bottom')+
-  coord_cartesian(ylim = c(0, 1.5))
+write.csv(
+  cor_all_pearson_sum,
+  file = paste0('paper_1mods_11gwas_sal_pearson.csv')
+)  
+
   
 
 
+# 
+# cor_all |>
+#   ggplot(aes(x=name, y=interaction(hash, term), color = spearman))+
+#   geom_tile()
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# ## Visualize
+# 
+# vwas <- read_parquet(as.character(mds[1, 'vnn_lsuv_tanh']))
+# dwas <- read_parquet(as.character(mds[1, 'dnn_tanh']))
+# 
+# tmp <- inner_join(
+#   full_join(
+#     rename(vwas, vsal = salience),
+#     rename(dwas, dsal = salience)
+#     ), 
+#   (gwas |> 
+#      as_tibble() |> 
+#      select(Chr, Pos, P.value) |>
+#      rename(
+#        chrom = Chr,
+#        pos = Pos,
+#        p = P.value
+#      ) |>
+#      mutate(chrom = as.character(chrom))
+#   )
+# )
+# 
+# 
+# tmp |>
+#   select(vsal, dsal, p) |>
+#   corrr::correlate()
+# 
+# 
+# p <- tmp |>
+#   pivot_longer(cols = c('vsal', 'dsal')) |>
+#   ggplot(aes(x = -log10(p), y = value)) +
+#   geom_smooth()+
+#   # geom_point()+
+#   facet_grid(~name)
 
 
 
-
-
-
-
-# prefix <- '../data_zma/phno_all_Yield_Mg_ha/vnn/models/vnn/version_0/0e9a1cb339'
-# 
-# blup <- read_parquet(paste0(prefix, '_bWGR_yhat.parquet'))
-# 
-# yhat_cs_trn   <- read_parquet(paste0(prefix, '_yhat_cs_trn.parquet'))
-# yhat_cs_val   <- read_parquet(paste0(prefix, '_yhat_cs_val.parquet'))
-# yhat_val      <- read_parquet(paste0(prefix, '_yhat_val.parquet'))
-# 
-# 
-# 
-# yvar_cs_trn   <- read_parquet(paste0(prefix, '_yvar_cs_trn.parquet'))
-# yvar_cs_val   <- read_parquet(paste0(prefix, '_yvar_cs_val.parquet'))
-# 
-# yvar_cs_scale <- read_parquet(paste0(prefix, '_yvar_cs_scale.parquet'))
-# yvar_cs_center<- read_parquet(paste0(prefix, '_yvar_cs_center.parquet'))
-# 
-# yvar_trn      <- read_parquet(paste0(prefix, '_yvar_trn.parquet'))
-# yvar_val      <- read_parquet(paste0(prefix, '_yvar_val.parquet'))
-# 
-# 
-# head((yvar_trn$Yield_Mg_ha * yvar_cs_scale$Yield_Mg_ha) + yvar_cs_center$Yield_Mg_ha )
-# 
-# 
-# plot(yvar_cs_trn$Yield_Mg_ha, yvar_trn$Yield_Mg_ha)
-# 
-# 
-# 
-# 
-# 
-# # plt_net_metrics <- function(md, phno_i, phase_i, show_min_loss = FALSE){
-# md |>
-#   filter(
-#     data == 'data_zma',
-#     phno == phno_i,
-#     # model == 'lin',
-#     model == 'vnn',
-#     phase == phase_i,
-#     version == 'version_0'
-#     # info == 'bWGR_yhat'
-#     ) |>
-#   select(path)
-
-
-  
 ```
 
 
+
+
+
+
+
+
+
+
+```{r}
+phno_i
+
+x <- list.files('../data_zma_lsuv_tanh/phno_all_Pollen_GDD__FTaxaREnvRGxE/vnn/models/vnn/version_0/')
+x <- x[str_detect(x, 'eval')]
+x <- x[str_detect(x, 'parquet')]
+
+prefix <- '../data_zma_lsuv_tanh/phno_all_Pollen_GDD__FTaxaREnvRGxE/vnn/models/vnn/version_0/da6512e68f'
+
+
+gradients_nodewise_bias    <- read_parquet(paste0(prefix, '_eval_gradients_nodewise_bias.parquet'))
+gradients_nodewise_weights <- read_parquet(paste0(prefix, '_eval_gradients_nodewise_weights.parquet'))
+rho_nodewise_trn           <- read_parquet(paste0(prefix, '_eval_rho_nodewise_trn.parquet'))
+rho_nodewise_val           <- read_parquet(paste0(prefix, '_eval_rho_nodewise_val.parquet'))
+salience_genewise_trn      <- read_parquet(paste0(prefix, '_eval_salience_genewise_trn.parquet'))
+salience_genewise_val      <- read_parquet(paste0(prefix, '_eval_salience_genewise_val.parquet'))
+salience_snpwise_trn       <- read_parquet(paste0(prefix, '_eval_salience_snpwise_trn.parquet'))
+salience_snpwise_val       <- read_parquet(paste0(prefix, '_eval_salience_snpwise_val.parquet'))
+
+
+## Rho ====
+
+M <- full_join(
+  # get layer info from this table
+  (select(gradients_nodewise_weights, layer, k) |> distinct() |> rename(node = k)),
+  (rho_nodewise_val |> filter(!is.na(Pollen_GDD)))
+  ) |>
+  filter(!is.na(node_forward_idx))
+
+
+library(ggridges)
+
+M |> 
+  mutate(layer = as.character(layer)) |>
+  ggplot(aes(x = Pollen_GDD, y = layer, fill = layer, group = layer))+
+  geom_density_ridges(alpha = 0.5)+
+  theme_minimal()+
+  scale_fill_brewer()
+
+
+library(ggbeeswarm)
+M |> 
+  mutate(layer = as.character(layer)) |>
+  ggplot(aes(x = layer, y = Pollen_GDD, color = layer, group = layer))+
+  # geom_violin(alpha = 0.5)+
+  ggbeeswarm::geom_quasirandom()  +
+  theme_minimal()+
+  scale_color_brewer()
+
+
+# Probably want some sort of table
+M |> 
+  arrange(Pollen_GDD_sig) |>
+  group_by(layer) |>
+  slice(1:5)
+  
+
+## gradients ====
+
+M <- (gradients_nodewise_weights |> distinct() |> rename(node = k))
+
+
+
+
+## Rho vs gradients ====
+
+
+M <- full_join(
+  # get layer info from this table
+  (gradients_nodewise_weights |> distinct() |> rename(node = k)),
+  (rho_nodewise_val |> filter(!is.na(Pollen_GDD)))
+  ) |>
+  filter(!is.na(node_forward_idx))
+
+
+i = 0
+
+
+
+e = 'pearson'
+
+tmp <- map(seq(0, 3), function(i){
+  mask <- (M$layer == i)
+  
+  map(c('pearson', 'spearman'), function(e){
+    as.numeric(
+      cor(
+        M[mask, 'trn_weight_grads'],
+        M[mask, 'Pollen_GDD'], 
+        method = e
+      )) 
+  }) |> unlist()
+})
+
+
+
+tmp
+
+cor(
+  M[mask, 'trn_weight_grads'],
+  M[mask, 'Pollen_GDD']
+  )
+
+
+
+
+map(seq(0, 3), function(i){
+  (M |>
+     filter(layer == i) |>
+     select(trn_weight_grads, Pollen_GDD) |>
+     correlate())[1, 2]
+})
+
+
+
+
+library(corrr)
+M |>
+  select(layer, #node, 
+         trn_weight_grads, Pollen_GDD) |>
+  group_by(layer) |>
+  correlate()
+
+M |>
+  filter(layer == 4) |>
+  select(trn_weight_grads, Pollen_GDD) |>
+  correlate()
+
+M |>
+  select(layer, #node, 
+         trn_weight_grads, Pollen_GDD) |>
+  mutate(trn_weight_grads = max(trn_weight_grads, na.rm=TRUE)) |>
+  group_by(layer) |>
+  correlate()
+
+M |>
+  select(layer, #node, 
+         trn_weight_grads, Pollen_GDD) |>
+  mutate(trn_weight_grads = mean(trn_weight_grads, na.rm=TRUE)) |>
+  group_by(layer) |>
+  correlate()
+
+## salience vs gwas ====
+
+```
+
+
+
+
+
+
 ## [_] Interpretation
+
+
+```{r}
+# subset md to work on just the flowering data initially. 
+mds <- md |>
+  filter(
+    phno == 'phno_all_Pollen_GDD__FTaxaREnvRGxE', 
+    phase == 'models'
+    ) 
+
+full_join(
+  
+  
+  (mds |> 
+     filter(
+    model == 'vnn', 
+    data  == 'data_zma_lsuv_tanh',
+    info  == 'eval_salience_snpwise_val'
+  ) |>
+    select(path, hash) |>
+    rename(vnn_lsuv_tanh = path)),
+  
+  (mds |> filter(
+    model == 'dnn', 
+    data  == 'data_zma',
+    info  == 'eval_salience_snpwise_val'
+  ) |>
+    select(path, hash) |>
+    rename(dnn_tanh = path))
+)
+
+# TODO
+# is there an issue with swapping the input data for data_zma_lsuv_tanh?
+# it da6512e68f_eval_salience_snpwise is the same across all of the reps.
+# maybe it's not getting updated on the eval script?
+
+# TODO run gapit on lambda3
+# There's an error with some of the input data, go line by line.
+
+
+
+
+13 eval_salience_snpwise_val      
+14 eval_salience_genewise_val     
+17 eval_salience_genewise_trn     
+18 eval_salience_snpwise_trn      
+15 eval_rho_nodewise_val          
+16 eval_rho_nodewise_trn          
+19 eval_gradients_nodewise_weights
+12 eval_gradients_nodewise_bias   
+
+
+  info                                                 
+  <chr>                                                
+1 bWGR_yhat                                            
+2 GAPIT.Association.GWAS_Results.BLINK.AdjADHSlope.csv 
+3 GAPIT.Association.GWAS_Results.BLINK.ProteinDry.csv  
+4 GAPIT.Association.GWAS_Results.BLINK.StachyoseDry.csv
+5 GAPIT.Association.GWAS_Results.BLINK.OilDry.csv  
+
+
+
+
+
+
+# a.	What are the top SNPs?
+# b.	How well does training SNP salience agree with GWAS? What about with DNN salience?
+# c.	Is there anything unexpected when we look at the importance of nodes instead of SNPs?
+
+
+
+
+```
+
+
+
+
+
+
+```{r}
+md <- data.frame(path = c(system("find ../data_* -name '*_eval_*parquet'", intern = T)))
+
+md <- md |> 
+  separate_wider_delim(
+    path, 
+    "/", 
+    names = c("drp1", "data", "phno", "model", "phase", "drp2", "version", "file"), 
+    too_many = "drop", 
+    cols_remove = F
+    ) |> 
+  select(-drp1, -drp2)
+
+md <- md  |> 
+  separate_wider_delim(
+    file, 
+    "_", 
+    names = c("hash", "info"), 
+    too_many = "merge",
+    cols_remove = T
+    ) |> 
+  select(-hash) |>
+  separate_wider_delim(
+    info, 
+    ".", 
+    names = c("info", "rm"), 
+    too_many = "merge",
+    cols_remove = T
+    ) |> 
+  select(-rm) |>
+  distinct()
+
+
+md |> select(info) |> distinct() |> arrange(info)
+
+# 1 eval_gradients_nodewise_bias   
+# 2 eval_gradients_nodewise_weights
+# 3 eval_rho_nodewise_trn          
+# 4 eval_rho_nodewise_val          
+# 5 eval_salience_genewise_trn     
+# 6 eval_salience_genewise_val     
+# 7 eval_salience_snpwise_trn      
+# 8 eval_salience_snpwise_val
+
+md |> 
+  filter(model == 'vnn', phase == 'models', info == 'eval_salience_genewise_val') |>
+  select(path)
+
+
+
+# let's do some examples
+## Salience
+### SNPwise
+M <- read_parquet('../data_dme/ADHReplicates_hzg/vnn/models/vnn/version_4/63dde66321_eval_salience_snpwise_val.parquet')
+
+M <- M |> 
+  mutate(pos = as.numeric(pos)) |>
+  arrange(chrom, pos)
+
+M$pos_i <- seq(1, nrow(M))
+
+M |>
+  group_by(chrom) |> 
+  ungroup() |>
+  ggplot(aes(pos_i, salience, color = chrom))+
+  geom_point()
+
+### Genewise
+M <- read_parquet('../data_dme/ADHReplicates_hzg/vnn/models/vnn/version_4/63dde66321_eval_salience_genewise_val.parquet') 
+M <- M |> 
+  mutate(pos = as.numeric(pos)) |>
+  arrange(chrom, pos)
+
+M$pos_i <- seq(1, nrow(M))
+
+M |>
+  group_by(chrom) |> 
+  ungroup() |>
+  ggplot(aes(pos_i, salience, color = chrom))+
+  geom_point()
+
+
+# show the top few hits
+left_join(
+  (filter(M, salience > quantile(M$salience, .95)) |> select(pos) |> distinct()), 
+  M
+  ) |>
+  group_by(pos) |>
+  filter(row_number() == 1) |>
+  ungroup() |>
+  arrange(salience) |>
+  select(salience, cxn)
+
+
+## Gradients Nodes
+M_gb <- read_parquet('../data_dme/ADHReplicates_hzg/vnn/models/vnn/version_4/63dde66321_eval_gradients_nodewise_bias.parquet')
+M_gw <- read_parquet('../data_dme/ADHReplicates_hzg/vnn/models/vnn/version_4/63dde66321_eval_gradients_nodewise_weights.parquet')
+
+M_gwb <- full_join(
+  (select(M_gb, layer, k, val_bias_grads)   |> group_by(layer, k) |> 
+     mutate(val_bias_grads = max(abs(val_bias_grads))) |> distinct()),
+  (select(M_gw, layer, k, val_weight_grads) |> group_by(layer, k) |> 
+     mutate(val_weight_grads = max(abs(val_weight_grads))) |> distinct())
+)
+
+M_gwb |>
+  filter(k != 'yhat') |>
+  ggplot(aes(x = val_bias_grads, y = val_weight_grads))+
+  geom_point()
+
+M_gwb |>
+  arrange(desc(val_weight_grads)) |>
+  head(20)
+  
+  
+## Correlation
+M_rho <- read_parquet('../data_dme/ADHReplicates_hzg/vnn/models/vnn/version_4/63dde66321_eval_rho_nodewise_val.parquet')
+M_rho <- M_rho |> drop_na()
+
+M_rho <- left_join(
+  M_rho, 
+  rename(distinct(select(M_gwb, layer, k)), node = k)
+)
+
+M_rho <- M_rho |>
+  mutate(absAdjADHSlope = abs(AdjADHSlope))
+
+ggplot(data = M_rho, aes(x = layer, y = absAdjADHSlope))+
+  geom_violin(aes(group = layer))+
+  geom_point(data = filter(M_rho, layer > 0))
+
+
+M_rho |> 
+  select(layer, node_forward_idx, node, absAdjADHSlope) |>
+  group_by(node) |>
+  mutate(absAdjADHSlope = max(absAdjADHSlope)) |>
+  distinct() |>
+  ungroup() |>
+  mutate(qthresh = quantile(absAdjADHSlope, .99)) |>
+  filter(absAdjADHSlope >= qthresh) |>
+  select(-qthresh) |>
+  arrange(desc(absAdjADHSlope))
+  
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ```{r}
 phno_i
 
