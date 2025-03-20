@@ -848,8 +848,62 @@ design <- "ABCDE"
 
 p <- (p[[1]]+p[[2]]+p[[3]]+p[[4]]+p[[5]])+plot_layout(design = design)
 
-
+poster_0hyps_1grid <- p
 ggsave('poster_0hyps_1grid.svg', p, width = 30, height = 5, units = 'in')
+
+
+
+
+
+
+```
+
+
+```{r}
+# abstract out
+
+# 250228 now that the maize meeting is off, this is going to be poorly named and hastely done - sorry future daniel. 
+"data_dme"       
+
+"data_gmx"
+
+
+xx_exp = "data_zma"
+
+mk_hyps_block <- 
+
+
+xx <- list(
+  c("dnn", paste0(xx_exp, ''),           "phno_all_Pollen_GDD__FTaxaREnvRGxE", "DNN Tanh"),
+  c("vnn", paste0(xx_exp, ''),           "phno_all_Pollen_GDD__FTaxaREnvRGxE", "VNN Tanh"),
+  c("vnn", paste0(xx_exp, '_lsuv_relu'), "phno_all_Pollen_GDD__FTaxaREnvRGxE", "VNN Tanh LSUV"),
+  c("vnn", paste0(xx_exp, '_lsuv_tanh'), "phno_all_Pollen_GDD__FTaxaREnvRGxE", "VNN Relu LSUV"), 
+  c("vnn", paste0(xx_exp, '_lsuv_vlin'), "phno_all_Pollen_GDD__FTaxaREnvRGxE", "VLN LSUV") 
+  )
+plt_list <- map(seq_along(xx), function(i){
+  plt <- plt_hyps(
+    df = filter(
+      M,
+      model == xx[[i]][1],
+      exp == xx[[i]][2],
+      phn == xx[[i]][3]
+      )
+    )
+  plt <- plt + labs(title = xx[[i]][4])
+  if(i < length(xx)){
+    plt <- plt + theme(legend.position = 'none')
+  }
+  return(plt)
+})
+
+return(plt_list)
+
+
+
+
+p <- plt_list 
+
+
 
 ```
 
@@ -884,13 +938,14 @@ p <- p+scale_y_continuous(
 
 p
 
+poster_0hyps_2trace <- p
 ggsave('poster_0hyps_2trace.svg', p, width = 15, height = 5, units = 'in')
 
 
 ```
 
 
-```{r}
+```{r, eval=FALSE}
 # plt_net_metrics(md = md, phno_i = 'phno_all_Yield_Mg_ha', phase_i = 'lightning')
 
 plt_list <- map(phno_iter, function(ii){
@@ -1002,7 +1057,7 @@ tmp_dl |>
 ```
 
 
-```{r}
+```{r, eval=FALSE}
 plt_list <- map(phno_iter, function(ii){
   plt_net_metrics(md = md, phase_i = 'models', phno_i = ii, show_min_loss = TRUE)
   })
@@ -1045,7 +1100,6 @@ AADG
 ```{r}
 # for poster
 
-
 p <- plt_net_metrics(md = md, phase_i = 'models', phno_i = 'phno_all_Pollen_GDD__FTaxaREnvRGxE', show_min_loss = TRUE)
 p <- p+scale_y_continuous(
         trans = "log10",
@@ -1065,77 +1119,16 @@ p <- p+scale_y_continuous(
 ))
 
 p
-
+poster_1mods_2trace <- p
 ggsave('poster_1mods_2trace.svg', p, width = 15, height = 5, units = 'in')
 ```
 
-## [_] Err. Prediction
-
-
-
-```{r}
-md$model |> unique()
-
-md |> 
-  filter(model == 'lin') |>
-  select(info) |> 
-  distinct()
-
-md |>
-  filter(
-    data == 'data_dme', 
-    phno == 'ADHReplicates_hzg',
-    model == 'lin', 
-    info == 'bWGR_yhat'
-    )
-
-tmp <- read_parquet('../data_dme/ADHReplicates_hzg/lin/models/blup/403fe023ad_bWGR_yhat.parquet')
-
-mean((tmp[, 2] - tmp[, 3])**2)
-
-names(tmp) <- c('Taxa', 'Obs', 'YHat', 'Split')
-
-tmp_cs <- tmp |> 
-  filter(Split == 'train') |>
-  summarise(
-    c = mean(Obs), 
-    s = sd(Obs)
-    )
-
-
-tmp |>
-  mutate(YHat = ((YHat * tmp_cs$s) + tmp_cs$c)) |>
-  ggplot(aes(x=Obs, y=YHat))+
-  geom_point()+
-  geom_smooth()+
-  facet_grid(.~Split)
-
-
-tmp |>
-  mutate(YHat = ((YHat * tmp_cs$s) + tmp_cs$c)) |>
-  group_by(Split) |>
-  summarise(MSE = mean((Obs - YHat)**2))
-
-```
+## [~] Err. Prediction
 
 
 
 ```{r}
 # # md
-# phase_i = 'models' # always
-# phno_i = 'ADHReplicates_hzg'
-# # show_min_loss
-# 
-# md |>
-#   filter(
-#     # data == 'data_dme', 
-#     phno == phno_i,
-#     model == 'lin', 
-#     info == 'bWGR_yhat'
-#     )
-# 
-# phno_iter
-# 
 # "ADHReplicates_hzg"                   "phno_all_Pollen_GDD__FTaxaREnvRGxE"  "phno_all_Yield_Mg_ha"               
 # [4] "phno_all_Yield_Mg_ha__FTaxaREnvRGxE" "phno_OilDry"                         "phno_ProteinDry"                    
 # [7] "phno_StachyoseDry"
@@ -1348,7 +1341,12 @@ tmp_all <- tmp_all |>
 
 
 
-tmp_all |>
+tmp_all <- tmp_all |>
+  mutate(
+    split = case_when(
+      split == 'trn' ~ 'Train', 
+      split == 'val' ~ 'Validation'
+      )) 
 
 
 
@@ -1360,23 +1358,35 @@ p_top <- tmp_all |>
   labs(x = '', y = '')+
   theme_minimal()+
   theme(axis.text.x = element_blank())+
+  theme(legend.position = 'none')+
   coord_cartesian(ylim = c(10, 4100))+
   scale_y_log10()
 
-
-tmp_all |> 
+p_bot <- tmp_all |> 
   ggplot(aes(x = init, y = mse, fill = split))+
   geom_boxplot()+
   geom_point(position = position_dodge(width=0.751) )+
   scale_fill_manual(values = c('cornflowerblue', 'orange') )+
   labs(x = '', y = 'MSE')+
   theme_minimal()+
+  theme(legend.position = 'bottom')+
   coord_cartesian(ylim = c(0, 1.5))
   
 
+p_top / p_bot
 
+design <- "
+A
+B
+B
+B
+B
+"
 
-    
+p <- (p_top + p_bot)+plot_layout(design = design)
+
+poster_1mods_3box <- p
+ggsave('poster_1mods_3box.svg', p, width = 30, height = 5, units = 'in')
 
 ```
 
@@ -1537,6 +1547,46 @@ out |>
   mutate(obs_rmcs =( (obs_cs * yvar_sd) + yvar_mu))
 
 
+p <- out |>
+  mutate(init = case_when(
+    interaction(model, data) == "lin.data_zma" ~ "BLUP",
+    interaction(model, data) == "vnn.data_zma" ~ "VNN Tanh",
+    interaction(model, data) == "dnn.data_zma" ~ "DNN Tanh",
+    interaction(model, data) == "vnn.data_zma_lsuv_relu" ~ "VNN Relu LSUV",
+    interaction(model, data) == "vnn.data_zma_lsuv_tanh" ~ "VNN Tanh LSUV",
+    interaction(model, data) == "vnn.data_zma_lsuv_vlin" ~ "VLN LSUV"
+  )) |>
+  mutate(init = factor(
+    init, 
+    c("BLUP", "DNN Tanh", "VNN Tanh", "VNN Tanh LSUV", "VNN Relu LSUV", "VLN LSUV") 
+  ))  |>
+  mutate(
+    split = case_when(
+      split == 'trn' ~ 'Train', 
+      split == 'val' ~ 'Validation'
+      )) |>
+  mutate(
+    Observed = case_when(
+      model == 'lin' ~   obs,
+      model != 'lin' ~ ((obs_cs * yvar_sd)+yvar_mu),
+    )
+  ) |>
+  ggplot(aes(Observed, yhat, color = split))+
+  geom_point()+
+  geom_smooth(color = 'black', method = 'lm')+
+  geom_abline(slope = 1, intercept = 0, linetype = 'dashed')+
+  facet_grid(split~init)+
+  scale_color_manual(values = c('cornflowerblue', 'orange') )+
+  theme_minimal()+
+  theme(legend.position = 'bottom')
+
+
+poster_1mods_4pts <- p
+ggsave('poster_1mods_4pts.svg', p, width = 30, height = 5, units = 'in')
+```
+
+
+```{r}
 mse_summary_dnn <- out |>
   filter(model != 'lin') |>
   mutate(obs_rmcs =( (obs_cs * yvar_sd) + yvar_mu)) |>
@@ -1555,6 +1605,75 @@ M |>
   scale_y_log10()
 
 
+tmp_all <- M |> 
+  mutate(init = case_when(
+    interaction(model, data) == "lin.data_zma" ~ "BLUP",
+    interaction(model, data) == "vnn.data_zma" ~ "VNN Tanh",
+    interaction(model, data) == "dnn.data_zma" ~ "DNN Tanh",
+    interaction(model, data) == "vnn.data_zma_lsuv_relu" ~ "VNN Relu LSUV",
+    interaction(model, data) == "vnn.data_zma_lsuv_tanh" ~ "VNN Tanh LSUV",
+    interaction(model, data) == "vnn.data_zma_lsuv_vlin" ~ "VLN LSUV"
+  )) |>
+  mutate(init = factor(
+    init, 
+    c("BLUP", "DNN Tanh", "VNN Tanh", "VNN Tanh LSUV", "VNN Relu LSUV", "VLN LSUV") 
+  ))  |>
+  mutate(
+    split = case_when(
+      split == 'trn' ~ 'Train', 
+      split == 'val' ~ 'Validation'
+      )) |>
+  rename(mse = MSE)
+
+
+
+tmp_all
+
+p <- tmp_all |> 
+  ggplot(aes(x = init, y = mse, fill = split))+
+  geom_boxplot()+
+  geom_point(position = position_dodge(width=0.751) )+
+  scale_fill_manual(values = c('cornflowerblue', 'orange') )+
+  labs(x = '', y = '')+
+  theme_minimal()+
+  # theme(axis.text.x = element_blank())+
+  theme(legend.position = 'none')
+  # coord_cartesian(ylim = c(0, 100))
+  # scale_y_log10()
+
+
+p+scale_y_log10()
+
+p+coord_cartesian(ylim = c(6975,7000))
+
+p+coord_cartesian(ylim = c(5000,7000))
+
+
+
+
+
+p_top <- tmp_all |> 
+  ggplot(aes(x = init, y = mse, fill = split))+
+  geom_boxplot()+
+  geom_point(position = position_dodge(width=0.751) )+
+  scale_fill_manual(values = c('cornflowerblue', 'orange') )+
+  labs(x = '', y = '')+
+  theme_minimal()+
+  theme(axis.text.x = element_blank())+
+  theme(legend.position = 'none')+
+  coord_cartesian(ylim = c(10, 4100))+
+  scale_y_log10()
+
+p_bot <- tmp_all |> 
+  ggplot(aes(x = init, y = mse, fill = split))+
+  geom_boxplot()+
+  geom_point(position = position_dodge(width=0.751) )+
+  scale_fill_manual(values = c('cornflowerblue', 'orange') )+
+  labs(x = '', y = 'MSE')+
+  theme_minimal()+
+  theme(legend.position = 'bottom')+
+  coord_cartesian(ylim = c(0, 1.5))
+  
 
 
 
@@ -1563,16 +1682,7 @@ M |>
 
 
 
-# 
-# 
-# 
-# 
-# 
-# 
-# 
-# 
-# 
-# 
+
 # prefix <- '../data_zma/phno_all_Yield_Mg_ha/vnn/models/vnn/version_0/0e9a1cb339'
 # 
 # blup <- read_parquet(paste0(prefix, '_bWGR_yhat.parquet'))
@@ -1624,8 +1734,6 @@ M |>
 ```{r}
 phno_i
 
-
-
 x <- list.files('../data_zma_lsuv_tanh/phno_all_Pollen_GDD__FTaxaREnvRGxE/vnn/models/vnn/version_0/')
 x <- x[str_detect(x, 'eval')]
 x <- x[str_detect(x, 'parquet')]
@@ -1641,6 +1749,131 @@ salience_genewise_trn      <- read_parquet(paste0(prefix, '_eval_salience_genewi
 salience_genewise_val      <- read_parquet(paste0(prefix, '_eval_salience_genewise_val.parquet'))
 salience_snpwise_trn       <- read_parquet(paste0(prefix, '_eval_salience_snpwise_trn.parquet'))
 salience_snpwise_val       <- read_parquet(paste0(prefix, '_eval_salience_snpwise_val.parquet'))
+
+
+## Rho ====
+
+M <- full_join(
+  # get layer info from this table
+  (select(gradients_nodewise_weights, layer, k) |> distinct() |> rename(node = k)),
+  (rho_nodewise_val |> filter(!is.na(Pollen_GDD)))
+  ) |>
+  filter(!is.na(node_forward_idx))
+
+
+library(ggridges)
+
+M |> 
+  mutate(layer = as.character(layer)) |>
+  ggplot(aes(x = Pollen_GDD, y = layer, fill = layer, group = layer))+
+  geom_density_ridges(alpha = 0.5)+
+  theme_minimal()+
+  scale_fill_brewer()
+
+
+library(ggbeeswarm)
+M |> 
+  mutate(layer = as.character(layer)) |>
+  ggplot(aes(x = layer, y = Pollen_GDD, color = layer, group = layer))+
+  # geom_violin(alpha = 0.5)+
+  ggbeeswarm::geom_quasirandom()  +
+  theme_minimal()+
+  scale_color_brewer()
+
+
+# Probably want some sort of table
+M |> 
+  arrange(Pollen_GDD_sig) |>
+  group_by(layer) |>
+  slice(1:5)
+  
+
+## gradients ====
+
+M <- (gradients_nodewise_weights |> distinct() |> rename(node = k))
+
+
+
+
+## Rho vs gradients ====
+
+
+M <- full_join(
+  # get layer info from this table
+  (gradients_nodewise_weights |> distinct() |> rename(node = k)),
+  (rho_nodewise_val |> filter(!is.na(Pollen_GDD)))
+  ) |>
+  filter(!is.na(node_forward_idx))
+
+
+i = 0
+
+
+
+e = 'pearson'
+
+tmp <- map(seq(0, 3), function(i){
+  mask <- (M$layer == i)
+  
+  map(c('pearson', 'spearman'), function(e){
+    as.numeric(
+      cor(
+        M[mask, 'trn_weight_grads'],
+        M[mask, 'Pollen_GDD'], 
+        method = e
+      )) 
+  }) |> unlist()
+})
+
+
+
+tmp
+
+cor(
+  M[mask, 'trn_weight_grads'],
+  M[mask, 'Pollen_GDD']
+  )
+
+
+
+
+map(seq(0, 3), function(i){
+  (M |>
+     filter(layer == i) |>
+     select(trn_weight_grads, Pollen_GDD) |>
+     correlate())[1, 2]
+})
+
+
+
+
+library(corrr)
+M |>
+  select(layer, #node, 
+         trn_weight_grads, Pollen_GDD) |>
+  group_by(layer) |>
+  correlate()
+
+M |>
+  filter(layer == 4) |>
+  select(trn_weight_grads, Pollen_GDD) |>
+  correlate()
+
+M |>
+  select(layer, #node, 
+         trn_weight_grads, Pollen_GDD) |>
+  mutate(trn_weight_grads = max(trn_weight_grads, na.rm=TRUE)) |>
+  group_by(layer) |>
+  correlate()
+
+M |>
+  select(layer, #node, 
+         trn_weight_grads, Pollen_GDD) |>
+  mutate(trn_weight_grads = mean(trn_weight_grads, na.rm=TRUE)) |>
+  group_by(layer) |>
+  correlate()
+
+## salience vs gwas ====
 
 ```
 
