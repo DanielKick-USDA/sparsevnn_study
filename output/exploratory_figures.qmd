@@ -517,7 +517,9 @@ M <- full_join(
 ```
 
 
-```{r hyps vis 2b}
+```{r hyps vis 2b, eval=FALSE}
+# use plt_hyps for poster
+
 plt_hyps_grid_compare <- function(
     df = filter(M, exp == "data_dme" & phn == "ADHReplicates_hzg" )
 ){
@@ -587,7 +589,9 @@ plt_hyps_grid_compare <- function(
 ```
 
 
-```{r hyps vis 2c}
+```{r hyps vis 2c, eval=FALSE}
+# use plt_hyps for poster
+
 plt_hyps_grid_compare(df = filter(
   M, exp == "data_dme" & 
      phn == "ADHReplicates_hzg" )
@@ -683,7 +687,7 @@ map(c(
 
 
 
-```{r}
+```{r disregard}
 
 
 # xx <-  M |> select(exp, phn) |> distinct() 
@@ -739,7 +743,7 @@ map(c(
 
 
 
-```{r}
+```{r poster}
 # for the poster
 
 # Can I tune hyperparameters?
@@ -842,9 +846,10 @@ p <- plt_list
 
 design <- "ABCDE"
 
-(p[[1]]+p[[2]]+p[[3]]+p[[4]]+p[[5]])+plot_layout(design = design)
+p <- (p[[1]]+p[[2]]+p[[3]]+p[[4]]+p[[5]])+plot_layout(design = design)
 
 
+ggsave('poster_0hyps_1grid.svg', p, width = 30, height = 5, units = 'in')
 
 ```
 
@@ -856,10 +861,11 @@ design <- "ABCDE"
 ## [X] Hyps Performance
 
 ```{r}
-# plt_net_metrics(md = md, phno_i = 'phno_all_Yield_Mg_ha', phase_i = 'lightning')
+# for poster
+
 
 p <- plt_net_metrics(md = md, phase_i = 'lightning', phno_i = 'phno_all_Pollen_GDD__FTaxaREnvRGxE')
-p+scale_y_continuous(
+p <- p+scale_y_continuous(
         trans = "log10",
         breaks = c(0.5, 1, 10, 100, 1000)
     )+
@@ -876,12 +882,16 @@ p+scale_y_continuous(
   )
 ))
 
+p
+
+ggsave('poster_0hyps_2trace.svg', p, width = 15, height = 5, units = 'in')
 
 
+```
 
 
-
-
+```{r}
+# plt_net_metrics(md = md, phno_i = 'phno_all_Yield_Mg_ha', phase_i = 'lightning')
 
 plt_list <- map(phno_iter, function(ii){
   plt_net_metrics(md = md, phase_i = 'lightning', phno_i = ii)
@@ -939,9 +949,11 @@ DG
 
 
 
+
+
 ## [X] Err. Hist.
 
-```{r}
+```{r, eval=FALSE}
 # Example case with vnn -- used this to figure out the above function (`plt_net_metrics`)
 
 tmp_md <- md |> 
@@ -1030,6 +1042,33 @@ AADG
 ```
 
 
+```{r}
+# for poster
+
+
+p <- plt_net_metrics(md = md, phase_i = 'models', phno_i = 'phno_all_Pollen_GDD__FTaxaREnvRGxE', show_min_loss = TRUE)
+p <- p+scale_y_continuous(
+        trans = "log10",
+        breaks = c(0.5, 1, 10, 100, 1000)
+    )+
+    labs(x = 'Epoch', y = 'Loss (MSE)')+
+  facet_grid(phno~init, labeller = labeller(
+  # .default = capitalize,
+  phno = c(phno_all_Pollen_GDD__FTaxaREnvRGxE = "Pollen GDD Est."),
+  init = c(
+    dnn.r.tanh = 'DNN Tanh',
+    vnn.r.tanh = 'VNN Tanh',
+    vnn.l.tanh = 'VNN Tanh LSUV',
+    vnn.l.relu = 'VNN Relu LSUV',
+    vnn.l.none = 'VLN LSUV'
+  )
+))
+
+p
+
+ggsave('poster_1mods_2trace.svg', p, width = 15, height = 5, units = 'in')
+```
+
 ## [_] Err. Prediction
 
 
@@ -1082,48 +1121,37 @@ tmp |>
 
 
 ```{r}
-# md
-phase_i = 'models' # always
-phno_i = 'ADHReplicates_hzg'
-# show_min_loss
-
-md |>
-  filter(
-    # data == 'data_dme', 
-    phno == phno_i,
-    model == 'lin', 
-    info == 'bWGR_yhat'
-    )
-
-
-
-
-# plt_net_metrics <- function(md, phno_i, phase_i, show_min_loss = FALSE){
-
-
-
-
-
-
-phno_iter
-
-"ADHReplicates_hzg"                   "phno_all_Pollen_GDD__FTaxaREnvRGxE"  "phno_all_Yield_Mg_ha"               
-[4] "phno_all_Yield_Mg_ha__FTaxaREnvRGxE" "phno_OilDry"                         "phno_ProteinDry"                    
-[7] "phno_StachyoseDry"
-
-phno_i = 'phno_all_Yield_Mg_ha'
+# # md
+# phase_i = 'models' # always
+# phno_i = 'ADHReplicates_hzg'
+# # show_min_loss
+# 
+# md |>
+#   filter(
+#     # data == 'data_dme', 
+#     phno == phno_i,
+#     model == 'lin', 
+#     info == 'bWGR_yhat'
+#     )
+# 
+# phno_iter
+# 
+# "ADHReplicates_hzg"                   "phno_all_Pollen_GDD__FTaxaREnvRGxE"  "phno_all_Yield_Mg_ha"               
+# [4] "phno_all_Yield_Mg_ha__FTaxaREnvRGxE" "phno_OilDry"                         "phno_ProteinDry"                    
+# [7] "phno_StachyoseDry"
+# 
+# phno_i = 'phno_all_Yield_Mg_ha'
 
 
-plt_final_loss(md = md, phno_i = 'phno_all_Yield_Mg_ha__FTaxaREnvRGxE')
 
-plt_final_loss <- function(md, phno_i){
+get_final_loss <- function(md, phno_i, phase_i = 'models'){
   # This is the same start as `plt_net_metrics` but 
   # 1. I filter to the final observations and 
   # 2. I collect values from the linear models.
   
   tmp_md <- md |> 
     filter(
-      phase == 'models', 
+      phase == phase_i, 
       info == 'metrics', 
       phno == phno_i
     ) 
@@ -1294,127 +1322,61 @@ plt_final_loss <- function(md, phno_i){
   )
   
   
-  tmp_all |> 
-    ggplot(aes(x = init, y = mse, fill = split))+
-    geom_boxplot()+
-    geom_point(position = position_dodge(width=0.751) )+
-    scale_y_log10()
-    
-    
-    
-    
-    
-  
-  
-  
-  # == == == == # 
-  tmp_dl_envelope <- tmp_dl |>
-    filter(split == 'trn') |>
-    # filter(model == 'vnn', split == 'trn') |>
-    group_by(data, phno, model, init, split, epoch) |>
-    mutate(
-      min_trn = case_when(split == 'trn' ~ min(loss)),
-      max_trn = case_when(split == 'trn' ~ max(loss)) )   |>
-    select(-loss, -step) |>
-    distinct()
-  
-  
-  if (phase_i == 'lightning'){
-    # color by percent of trials
-    # plt <- tmp_dl |>
-    #   filter(split == 'val') |>
-    #   mutate(v = as.numeric(str_extract(version, '\\d+$'))) |>
-    #   group_by(data, phno, model, phase, init) |>
-    #   mutate(pr.trial = v/max(v)) |>
-    #   ggplot(aes(x = epoch, group = path))+
-    #   geom_ribbon(data=tmp_dl_envelope, aes(ymin=min_trn, ymax=max_trn), alpha = 0.3)+
-    #   geom_line(aes(y = loss, color =  pr.trial))+
-    #   theme_minimal()+
-    #   facet_grid(phno~init)
-    
-    # Show last entry
-    plt <- tmp_dl |>
-      filter(split == 'val') |>
-      mutate(v = as.numeric(str_extract(version, '\\d+$'))) |>
-      group_by(data, phno, model, phase, init) |>
-      mutate(last.trial = case_when(v == max(v) ~ TRUE, 
-                                    TRUE ~ FALSE)) |>
-      arrange(epoch, step) |>
-      ggplot(aes(x = epoch, group = path))+
-      geom_ribbon(data=tmp_dl_envelope, aes(ymin=min_trn, ymax=max_trn), alpha = 0.3)+
-      geom_line(aes(y = loss, color =  last.trial), alpha = 0.3)+
-      theme_minimal()+
-      facet_grid(phno~init)+
-      scale_color_manual(values = c('lightgrey', 'firebrick'))+
-      theme(legend.position = 'none')
-
-  } else if (phase_i == 'models'){
-    
-    plt <- tmp_dl |>
-      filter(split == 'val') |>
-      arrange(epoch, step) |>
-      # filter(model == 'vnn', split == 'val') |>
-      ggplot(aes(x = epoch, group = path))+
-      geom_ribbon(data=tmp_dl_envelope, aes(ymin=min_trn, ymax=max_trn), alpha = 0.3)+
-      geom_line(aes(y = loss))+
-      theme_minimal()+
-      # coord_cartesian(xlim = c(0, 1))+
-      facet_grid(phno~init)
-  }
-  
-  if(show_min_loss == TRUE){
-    # find the lowest validation observation and adorn all the plots
-  
-    tmp_dl_hline <- tmp_dl |>
-      filter(split == 'val') |>
-      arrange(epoch, step)
-    
-    tmp_dl_hline <- left_join(
-      (tmp_dl_hline |>
-         group_by(data, phno, model, phase, init) |>
-         summarize(loss = min(loss, na.rm = T)) |>
-         ungroup()),
-      tmp_dl_hline
-    ) |> 
-      ungroup() |>
-      mutate(min_loss = min(loss, na.rm = T))
-    
-    
-    # plt <- tmp_dl |>
-    #     filter(split == 'val') |>
-    #     arrange(epoch, step) |>
-    #     # filter(model == 'vnn', split == 'val') |>
-    #     ggplot(aes(x = epoch, group = path))+
-    #     geom_ribbon(data=tmp_dl_envelope, aes(ymin=min_trn, ymax=max_trn), alpha = 0.3)+
-    #     geom_line(aes(y = loss))+
-    #     theme_minimal()+
-    #     # coord_cartesian(xlim = c(0, 1))+
-    #     facet_grid(phno~init)+
-    #     scale_y_continuous(
-    #         trans = "log10",
-    #         breaks = c(0.5, 1, 10, 100, 1000)
-    #     )
-    
-    plt <- plt+geom_hline(
-      data = tmp_dl_hline, 
-      aes(yintercept = min_loss), 
-      color = 'cornflowerblue', 
-      linetype = 'solid'
-    )+
-      geom_segment(
-        data = tmp_dl_hline, 
-        aes(x = epoch, y = loss, xend = epoch, yend = min_loss),
-        arrow = arrow(length = unit(5, "pt"), type = "closed"),
-        color = "orange",
-        # size = 1.5,
-        linetype = 'solid'
-      )
-  }
-  
-  return(plt)
+  return(tmp_all)
 }
 
 
+tmp_all <- get_final_loss(
+  md = md, 
+  phno_i = 'phno_all_Yield_Mg_ha__FTaxaREnvRGxE', 
+  phase_i = 'models'
+  )
+
+tmp_all <- tmp_all |> 
+  mutate(init = case_when(
+    init == "lin.none" ~ "BLUP",
+    init == "vnn.r.tanh" ~ "VNN Tanh",
+    init == "dnn.r.tanh" ~ "DNN Tanh",
+    init == "vnn.l.relu" ~ "VNN Relu LSUV",
+    init == "vnn.l.tanh" ~ "VNN Tanh LSUV",
+    init == "vnn.l.none" ~ "VLN LSUV"
+  )) |>
+  mutate(init = factor(
+    init, 
+    c("BLUP", "DNN Tanh", "VNN Tanh", "VNN Tanh LSUV", "VNN Relu LSUV", "VLN LSUV") 
+  ))
+
+
+
+tmp_all |>
+
+
+
+p_top <- tmp_all |> 
+  ggplot(aes(x = init, y = mse, fill = split))+
+  geom_boxplot()+
+  geom_point(position = position_dodge(width=0.751) )+
+  scale_fill_manual(values = c('cornflowerblue', 'orange') )+
+  labs(x = '', y = '')+
+  theme_minimal()+
+  theme(axis.text.x = element_blank())+
+  coord_cartesian(ylim = c(10, 4100))+
+  scale_y_log10()
+
+
+tmp_all |> 
+  ggplot(aes(x = init, y = mse, fill = split))+
+  geom_boxplot()+
+  geom_point(position = position_dodge(width=0.751) )+
+  scale_fill_manual(values = c('cornflowerblue', 'orange') )+
+  labs(x = '', y = 'MSE')+
+  theme_minimal()+
+  coord_cartesian(ylim = c(0, 1.5))
+  
+
+
+
+    
 
 ```
 
