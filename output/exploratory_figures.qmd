@@ -73,6 +73,166 @@ load_model_metrics <- function(
 }
 ```
 
+```{r}
+# moved from Hyps Performance
+plt_net_metrics <- function(md, phno_i, phase_i, show_min_loss = FALSE){
+  tmp_md <- md |> 
+    filter(
+      phase == phase_i, 
+      info == 'metrics', 
+      phno == phno_i
+    ) 
+  
+  tmp_md <- tmp_md |>
+    mutate(init = case_when(
+      str_detect(data, 'lsuv_relu$') ~ 'l.relu',
+      str_detect(data, 'lsuv_tanh$') ~ 'l.tanh',
+      str_detect(data, 'lsuv_vlin$') ~ 'l.none',
+      TRUE ~ 'r.tanh'
+    )) 
+  
+  tmp_dl <- map(tmp_md$path, function(ii){mutate(load_model_metrics(ii)$metrics, path=ii)})
+  
+  tmp_dl <- full_join(tmp_md, do.call(rbind, tmp_dl) )
+  
+  # NOTE without modificaiton to the init field it's best to filter the records
+  # tmp_dl <- tmp_dl |> filter(model == 'vnn')
+  tmp_dl <- tmp_dl |> 
+    mutate(init = paste0(model, '.', init)) 
+  
+  
+  tmp_dl <- full_join(
+    tmp_dl, 
+    expand.grid(
+      phno = phno_i,
+      split = c('trn', 'val'),
+      init = c(
+        'dnn.r.tanh', 
+        'vnn.r.tanh', 
+        'vnn.l.tanh', 
+        'vnn.l.relu',
+        'vnn.l.none'
+    )
+    )) |>  
+    mutate(init = factor(init, levels = c(
+      'dnn.r.tanh', 
+      'vnn.r.tanh', 
+      'vnn.l.tanh', 
+      'vnn.l.relu',
+      'vnn.l.none'
+    )))
+  
+  
+  tmp_dl_envelope <- tmp_dl |>
+    filter(split == 'trn') |>
+    # filter(model == 'vnn', split == 'trn') |>
+    group_by(data, phno, model, init, split, epoch) |>
+    mutate(
+      min_trn = case_when(split == 'trn' ~ min(loss)),
+      max_trn = case_when(split == 'trn' ~ max(loss)) )   |>
+    select(-loss, -step) |>
+    distinct()
+  
+  
+  if (phase_i == 'lightning'){
+    # color by percent of trials
+    # plt <- tmp_dl |>
+    #   filter(split == 'val') |>
+    #   mutate(v = as.numeric(str_extract(version, '\\d+$'))) |>
+    #   group_by(data, phno, model, phase, init) |>
+    #   mutate(pr.trial = v/max(v)) |>
+    #   ggplot(aes(x = epoch, group = path))+
+    #   geom_ribbon(data=tmp_dl_envelope, aes(ymin=min_trn, ymax=max_trn), alpha = 0.3)+
+    #   geom_line(aes(y = loss, color =  pr.trial))+
+    #   theme_minimal()+
+    #   facet_grid(phno~init)
+    
+    # Show last entry
+    tmp_dl_plt <-  tmp_dl |>
+      filter(split == 'val') |>
+      mutate(v = as.numeric(str_extract(version, '\\d+$'))) |>
+      group_by(data, phno, model, phase, init) |>
+      mutate(last.trial = case_when(v == max(v) ~ TRUE, 
+                                    TRUE ~ FALSE)) |>
+      arrange(epoch, step)
+    
+    plt <- tmp_dl_plt |>
+      ggplot(aes(x = epoch, group = path))+
+      geom_ribbon(data=tmp_dl_envelope, aes(ymin=min_trn, ymax=max_trn), alpha = 0.1)+
+      geom_line(aes(y = loss), color = 'lightgrey', alpha = 0.6)+
+      geom_line(data = filter(tmp_dl_plt, last.trial == TRUE), aes(y = loss), color = 'red')+
+      theme_minimal()+
+      facet_grid(phno~init)+
+      # scale_color_manual(values = c('lightgrey', 'firebrick'))+
+      theme(legend.position = 'none')
+
+  } else if (phase_i == 'models'){
+    
+    plt <- tmp_dl |>
+      filter(split == 'val') |>
+      arrange(epoch, step) |>
+      # filter(model == 'vnn', split == 'val') |>
+      ggplot(aes(x = epoch, group = path))+
+      geom_ribbon(data=tmp_dl_envelope, aes(ymin=min_trn, ymax=max_trn), alpha = 0.3)+
+      geom_line(aes(y = loss))+
+      theme_minimal()+
+      # coord_cartesian(xlim = c(0, 1))+
+      facet_grid(phno~init)
+  }
+  
+  if(show_min_loss == TRUE){
+    # find the lowest validation observation and adorn all the plots
+  
+    tmp_dl_hline <- tmp_dl |>
+      filter(split == 'val') |>
+      arrange(epoch, step)
+    
+    tmp_dl_hline <- left_join(
+      (tmp_dl_hline |>
+         group_by(data, phno, model, phase, init) |>
+         summarize(loss = min(loss, na.rm = T)) |>
+         ungroup()),
+      tmp_dl_hline
+    ) |> 
+      ungroup() |>
+      mutate(min_loss = min(loss, na.rm = T))
+    
+    
+    # plt <- tmp_dl |>
+    #     filter(split == 'val') |>
+    #     arrange(epoch, step) |>
+    #     # filter(model == 'vnn', split == 'val') |>
+    #     ggplot(aes(x = epoch, group = path))+
+    #     geom_ribbon(data=tmp_dl_envelope, aes(ymin=min_trn, ymax=max_trn), alpha = 0.3)+
+    #     geom_line(aes(y = loss))+
+    #     theme_minimal()+
+    #     # coord_cartesian(xlim = c(0, 1))+
+    #     facet_grid(phno~init)+
+    #     scale_y_continuous(
+    #         trans = "log10",
+    #         breaks = c(0.5, 1, 10, 100, 1000)
+    #     )
+    
+    plt <- plt+geom_hline(
+      data = tmp_dl_hline, 
+      aes(yintercept = min_loss), 
+      color = 'cornflowerblue', 
+      linetype = 'solid'
+    )+
+      geom_segment(
+        data = tmp_dl_hline, 
+        aes(x = epoch, y = loss, xend = epoch, yend = min_loss),
+        arrow = arrow(length = unit(5, "pt"), type = "closed"),
+        color = "orange",
+        # size = 1.5,
+        linetype = 'solid'
+      )
+  }
+  
+  return(plt)
+}
+
+```
 
 
 
@@ -179,9 +339,9 @@ md
 
 
 
-## [x] Hyps Stabilization
+## [X] Hyps Stabilization
 
-```{r hyps vis 1, eval=FALSE}
+```{r hyps vis 1a, eval=FALSE}
 # Hyperparameters ---
 
 
@@ -290,7 +450,7 @@ plt_hyps_grid_dnn <- function(
 ```
 
 
-```{r hyps vis 1, eval=FALSE}
+```{r hyps vis 1b, eval=FALSE}
 hvnn <- read_parquet('./ax_tables_vnn.parquet')
 hdnn <- read_parquet('./ax_tables_dnn.parquet')
 
@@ -326,7 +486,7 @@ p1/p2
 ```
 
 
-```{r hyps vis 2}
+```{r hyps vis 2a}
 # Hyperparameters ---
 
 hvnn <- read_parquet('./ax_tables_vnn.parquet')
@@ -357,7 +517,7 @@ M <- full_join(
 ```
 
 
-```{r hyps vis 2}
+```{r hyps vis 2b}
 plt_hyps_grid_compare <- function(
     df = filter(M, exp == "data_dme" & phn == "ADHReplicates_hzg" )
 ){
@@ -427,7 +587,7 @@ plt_hyps_grid_compare <- function(
 ```
 
 
-```{r hyps vis 2}
+```{r hyps vis 2c}
 plt_hyps_grid_compare(df = filter(
   M, exp == "data_dme" & 
      phn == "ADHReplicates_hzg" )
@@ -497,8 +657,6 @@ plt_hyps_lst <- map(
 p <- plt_hyps_lst
 
 
-
-
 map(c(
   "ADHReplicates_hzg",
   "phno_ProteinDry",
@@ -525,137 +683,227 @@ map(c(
 
 
 
-
-
-## [X] Hyps Performance
 ```{r}
-plt_net_metrics <- function(md, phno_i, phase_i){
-  tmp_md <- md |> 
-    filter(
-      phase == phase_i, 
-      info == 'metrics', 
-      phno == phno_i
-    ) 
-  
-  tmp_md <- tmp_md |>
-    mutate(init = case_when(
-      str_detect(data, 'lsuv_relu$') ~ 'l.relu',
-      str_detect(data, 'lsuv_tanh$') ~ 'l.tanh',
-      str_detect(data, 'lsuv_vlin$') ~ 'l.none',
-      TRUE ~ 'r.tanh'
-    )) 
-  
-  tmp_dl <- map(tmp_md$path, function(ii){mutate(load_model_metrics(ii)$metrics, path=ii)})
-  
-  tmp_dl <- full_join(tmp_md, do.call(rbind, tmp_dl) )
-  
-  # NOTE without modificaiton to the init field it's best to filter the records
-  # tmp_dl <- tmp_dl |> filter(model == 'vnn')
-  tmp_dl <- tmp_dl |> 
-    mutate(init = paste0(model, '.', init)) 
-  
-  
-  
-  
-  
-  tmp_dl <- full_join(
-    tmp_dl, 
-    expand.grid(
-      phno = phno_i,
-      split = c('trn', 'val'),
-      init = c(
-        'dnn.r.tanh', 
-        'vnn.r.tanh', 
-        'vnn.l.tanh', 
-        'vnn.l.relu',
-        'vnn.l.none'
-    )
-    )) |>  
-    mutate(init = factor(init, levels = c(
-      'dnn.r.tanh', 
-      'vnn.r.tanh', 
-      'vnn.l.tanh', 
-      'vnn.l.relu',
-      'vnn.l.none'
-    )))
-  
-  
-  tmp_dl_envelope <- tmp_dl |>
-    filter(split == 'trn') |>
-    # filter(model == 'vnn', split == 'trn') |>
-    group_by(data, phno, model, init, split, epoch) |>
-    mutate(
-      min_trn = case_when(split == 'trn' ~ min(loss)),
-      max_trn = case_when(split == 'trn' ~ max(loss)) )   |>
-    select(-loss, -step) |>
-    distinct()
-  
-  
-  if (phase_i == 'lightning'){
-    # color by percent of trials
-    # plt <- tmp_dl |>
-    #   filter(split == 'val') |>
-    #   mutate(v = as.numeric(str_extract(version, '\\d+$'))) |>
-    #   group_by(data, phno, model, phase, init) |>
-    #   mutate(pr.trial = v/max(v)) |>
-    #   ggplot(aes(x = epoch, group = path))+
-    #   geom_ribbon(data=tmp_dl_envelope, aes(ymin=min_trn, ymax=max_trn), alpha = 0.3)+
-    #   geom_line(aes(y = loss, color =  pr.trial))+
-    #   theme_minimal()+
-    #   facet_grid(phno~init)
-    
-    # Show last entry
-    plt <- tmp_dl |>
-      filter(split == 'val') |>
-      mutate(v = as.numeric(str_extract(version, '\\d+$'))) |>
-      group_by(data, phno, model, phase, init) |>
-      mutate(last.trial = case_when(v == max(v) ~ TRUE, 
-                                    TRUE ~ FALSE)) |>
-      arrange(epoch, step) |>
-      ggplot(aes(x = epoch, group = path))+
-      geom_ribbon(data=tmp_dl_envelope, aes(ymin=min_trn, ymax=max_trn), alpha = 0.3)+
-      geom_line(aes(y = loss, color =  last.trial), alpha = 0.3)+
-      theme_minimal()+
-      facet_grid(phno~init)+
-      scale_color_manual(values = c('grey', 'firebrick'))+
-      theme(legend.position = 'none')
 
-  } else if (phase_i == 'models'){
-    
-    plt <- tmp_dl |>
-      filter(split == 'val') |>
-      arrange(epoch, step) |>
-      # filter(model == 'vnn', split == 'val') |>
-      ggplot(aes(x = epoch, group = path))+
-      geom_ribbon(data=tmp_dl_envelope, aes(ymin=min_trn, ymax=max_trn), alpha = 0.3)+
-      geom_line(aes(y = loss))+
-      theme_minimal()+
-      # coord_cartesian(xlim = c(0, 1))+
-      facet_grid(phno~init)
-  }
-  return(plt)
-}
+
+# xx <-  M |> select(exp, phn) |> distinct() 
+# 
+# xx <- data.frame(list(
+#   c("", "data_dme", "ADHReplicates_hzg"), 
+#   c("", "data_dme_lsuv_relu", "ADHReplicates_hzg"),
+#   c("", "data_dme_lsuv_tanh", "ADHReplicates_hzg"), 
+#   c("", "data_dme_lsuv_vlin", "ADHReplicates_hzg"), 
+#   c("", "data_gmx", "phno_ProteinDry"), 
+#   c("", "data_gmx", "phno_StachyoseDry"), 
+#   c("", "data_gmx", "phno_OilDry"), 
+#   c("", "data_gmx_lsuv_relu", "phno_ProteinDry"), 
+#   c("", "data_gmx_lsuv_relu", "phno_StachyoseDry"), 
+#   c("", "data_gmx_lsuv_relu", "phno_OilDry"), 
+#   c("", "data_gmx_lsuv_tanh", "phno_ProteinDry"), 
+#   c("", "data_gmx_lsuv_tanh", "phno_OilDry"), 
+#   c("", "data_gmx_lsuv_vlin", "phno_ProteinDry"), 
+#   c("", "data_gmx_lsuv_vlin", "phno_StachyoseDry"), 
+#   c("", "data_gmx_lsuv_vlin", "phno_OilDry"), 
+#   c("", "data_zma", "phno_all_Pollen_GDD__FTaxaREnvRGxE"), 
+#   c("", "data_zma", "phno_all_Yield_Mg_ha"), 
+#   c("", "data_zma", "phno_all_Pollen_GDD__WIH2_2020"), 
+#   c("", "data_zma", "phno_all_Yield_Mg_ha__IAH3_2021"), 
+#   c("", "data_zma", "phno_all_Yield_Mg_ha__FTaxaREnvRGxE"), 
+#   c("", "data_zma_lsuv_relu", "phno_all_Pollen_GDD__FTaxaREnvRGxE"), 
+#   c("", "data_zma_lsuv_relu", "phno_all_Yield_Mg_ha"), 
+#   c("", "data_zma_lsuv_relu", "phno_all_Yield_Mg_ha__FTaxaREnvRGxE"), 
+#   c("", "data_zma_lsuv_tanh", "phno_all_Pollen_GDD__FTaxaREnvRGxE"), 
+#   c("", "data_zma_lsuv_tanh", "phno_all_Yield_Mg_ha"), 
+#   c("", "data_zma_lsuv_tanh", "phno_all_Yield_Mg_ha__FTaxaREnvRGxE"), 
+#   c("", "data_zma_lsuv_vlin", "phno_all_Pollen_GDD__FTaxaREnvRGxE"), 
+#   c("", "data_zma_lsuv_vlin", "phno_all_Yield_Mg_ha"), 
+#   c("", "data_zma_lsuv_vlin", "phno_all_Yield_Mg_ha__FTaxaREnvRGxE")
+# )) |> t()
+# 
+# xx <- data.frame(
+#   new = as.vector(xx[, 1]),
+#   exp = as.vector(xx[, 2]),
+#   phn = as.vector(xx[, 3])  
+# )
+# 
+# 
+# xx[20:25, ]
+# i = 22
+# 
+# 
+# plt_hyps_grid_compare(df = filter(
+#   M, exp == xx[i, 'exp'] & 
+#      phn == xx[i, 'phn'] )
+#   )+labs(title = paste(xx[i, 'phn'], xx[i, 'exp']))
 ```
 
 
+
 ```{r}
-plt_net_metrics(md = md, phno_i = 'phno_all_Yield_Mg_ha', phase_i = 'lightning')
+# for the poster
+
+# Can I tune hyperparameters?
+
+
+plt_hyps <- function(
+    df = filter(
+      M, 
+      exp == 'data_zma', # "data_zma"           "data_zma_lsuv_relu" "data_zma_lsuv_tanh" "data_zma_lsuv_vlin"
+      phn == "phno_all_Pollen_GDD__FTaxaREnvRGxE",
+      model == 'dnn' # vnn dnn
+      )
+){
+  plt <- df |> 
+    full_join(data.frame(
+      model = c(''),
+      trial_index = c(NA) # spiking in a NA here and then using TRUE ~ '' in mutate below adds a spacer
+    )) |>
+    group_by(exp, phn, model, name) |>
+    # set scaling col
+    mutate(pr_max = (value - min(value))/(max(value) - min(value)) ) |>
+    ungroup() |>
+    # filter(!is.na(name)) |>
+    mutate(
+      # higher level grouping
+      node_type = case_when(
+        name %in% c('train_loss') ~ '',
+        name %in% c( 'default_out_nodes_inp',  'default_out_nodes_edge', 'default_drop_nodes_out', 'width') ~ 'Width',
+        name %in% c('default_decay_rate', 'width_decay_rate', 'width_decay_reverse') ~ 'Width',
+        name %in% c('default_drop_nodes_inp', 'default_drop_nodes_edge'                          , 'drop') ~ 'Dropout',
+        name %in% c('drop_decay_rate', 'drop_decay_reverse') ~ 'Dropout',
+        name %in% c('default_reps_nodes_inp', 'default_reps_nodes_edge', 'default_reps_nodes_out') ~ 'Repeats',
+        name %in% c('hidden_layers') ~ '',
+        TRUE ~ ''
+      ),
+      # this is the lowest level 
+      node_attr = case_when(
+        name %in% c('train_loss') ~ 'Loss',    
+        
+        name %in% c('default_out_nodes_inp', 'default_drop_nodes_inp', 'default_reps_nodes_inp') ~ 'Input',
+        name %in% c('default_out_nodes_edge', 'default_drop_nodes_edge', 'default_reps_nodes_edge') ~ 'Edge',
+        
+        
+        name %in% c('width') ~ 'Edge',
+        name %in% c('default_drop_nodes_out', 'default_reps_nodes_out') ~ 'Output',
+        
+        name %in% c('default_decay_rate', 'width_decay_rate',    'drop_decay_rate'   ) ~ 'Rate',      
+        name %in% c(                      'width_decay_reverse', 'drop_decay_reverse') ~ 'Order',  
+        name %in% c('drop') ~ 'Edge',
+        name %in% c('hidden_layers') ~ 'Layers',
+        
+        TRUE ~ ''
+      )) |>
+    # select(node_type, node_attr) |> distinct()
+    
+    mutate(
+      node_type = factor(node_type, levels = c('', 'Repeats', 'Dropout', 'Width')),
+      node_attr = factor(node_attr, levels = c('Loss', '',
+                                               'Order', 'Rate', 'Base', 'Layers', 'Input', 'Edge', 'Output'
+                                               ))
+    ) |>
+    ggplot(aes(x = trial_index, y = interaction(node_attr, node_type), fill = 100*pr_max))+
+    geom_tile()+
+    scale_y_discrete(guide = "axis_nested")+
+    labs(x = 'Hyperparameter Set', y = '', title = 'Iterative Improvement of Hyperparameters', fill = '% Max')+
+    theme(panel.background = element_rect(fill = "white", colour = NA), axis.ticks = element_line(colour = 'gray'))
+  
+  return(plt)
+  
+}
+
+
+
+xx <- list(
+  c("dnn", "data_zma",           "phno_all_Pollen_GDD__FTaxaREnvRGxE", "DNN Tanh"),
+  c("vnn", "data_zma",           "phno_all_Pollen_GDD__FTaxaREnvRGxE", "VNN Tanh"),
+  c("vnn", "data_zma_lsuv_relu", "phno_all_Pollen_GDD__FTaxaREnvRGxE", "VNN Tanh LSUV"),
+  c("vnn", "data_zma_lsuv_tanh", "phno_all_Pollen_GDD__FTaxaREnvRGxE", "VNN Relu LSUV"), 
+  c("vnn", "data_zma_lsuv_vlin", "phno_all_Pollen_GDD__FTaxaREnvRGxE", "VLN LSUV") 
+  )
+plt_list <- map(seq_along(xx), function(i){
+  plt <- plt_hyps(
+    df = filter(
+      M,
+      model == xx[[i]][1],
+      exp == xx[[i]][2],
+      phn == xx[[i]][3]
+      )
+    )
+  plt <- plt + labs(title = xx[[i]][4])
+  if(i < length(xx)){
+    plt <- plt + theme(legend.position = 'none')
+  }
+  return(plt)
+})
+
+p <- plt_list 
+
+
+
+design <- "ABCDE"
+
+(p[[1]]+p[[2]]+p[[3]]+p[[4]]+p[[5]])+plot_layout(design = design)
+
+
+
+```
+
+
+
+
+
+
+## [X] Hyps Performance
+
+```{r}
+# plt_net_metrics(md = md, phno_i = 'phno_all_Yield_Mg_ha', phase_i = 'lightning')
+
+p <- plt_net_metrics(md = md, phase_i = 'lightning', phno_i = 'phno_all_Pollen_GDD__FTaxaREnvRGxE')
+p+scale_y_continuous(
+        trans = "log10",
+        breaks = c(0.5, 1, 10, 100, 1000)
+    )+
+    labs(x = '', y = '')+
+  facet_grid(phno~init, labeller = labeller(
+  # .default = capitalize,
+  phno = c(phno_all_Pollen_GDD__FTaxaREnvRGxE = "Pollen GDD Est."),
+  init = c(
+    dnn.r.tanh = 'DNN Tanh',
+    vnn.r.tanh = 'VNN Tanh',
+    vnn.l.tanh = 'VNN Tanh LSUV',
+    vnn.l.relu = 'VNN Relu LSUV',
+    vnn.l.none = 'VLN LSUV'
+  )
+))
+
+
+
+
+
+
+
 
 plt_list <- map(phno_iter, function(ii){
   plt_net_metrics(md = md, phase_i = 'lightning', phno_i = ii)
   })
 
 
-
-
+# plt_list <- map(plt_list, function(e){
+#   e+scale_y_continuous(
+#         trans = "log10",
+#         breaks = c(0.5, 1, 10, 100, 1000)
+#     )
+#   })
 plt_list <- map(plt_list, function(e){
   e+scale_y_continuous(
         trans = "log10",
         breaks = c(0.5, 1, 10, 100, 1000)
-    )
+    )+
+    labs(x = '', y = '')
   })
 
-
+plt_list[[1]] <- plt_list[[1]]+
+    labs(x = 'Epoch', y = 'Loss (MSE)')
 
 
 p <- plt_list
@@ -668,20 +916,30 @@ AACF
 AADG
 "
 
+
+design <- "
+AA
+AA
+BE
+CF
+DG
+"
+
 (
+  p[["phno_all_Pollen_GDD__FTaxaREnvRGxE"]]+
+  p[["phno_all_Yield_Mg_ha__FTaxaREnvRGxE"]]+
+  p[["phno_all_Yield_Mg_ha"]]+
   p[["ADHReplicates_hzg"]]+
   p[["phno_OilDry"]]+
   p[["phno_ProteinDry"]]+
-  p[["phno_StachyoseDry"]]+ 
-  p[["phno_all_Pollen_GDD__FTaxaREnvRGxE"]]+
-  p[["phno_all_Yield_Mg_ha__FTaxaREnvRGxE"]]+
-  p[["phno_all_Yield_Mg_ha"]]
+  p[["phno_StachyoseDry"]]
 )+plot_layout(design = design)
+
 ```
 
 
 
-## [_] Err. Hist.
+## [X] Err. Hist.
 
 ```{r}
 # Example case with vnn -- used this to figure out the above function (`plt_net_metrics`)
@@ -724,100 +982,706 @@ tmp_dl |>
   geom_line(aes(y = loss))+
   theme_minimal()+
   # coord_cartesian(xlim = c(0, 1))+
-  facet_grid(phno~init)
+  facet_grid(phno~init)+
+  scale_y_continuous(
+    trans = "log10",
+    breaks = c(0.5, 1, 10, 100, 1000)
+  )
 ```
-
 
 
 ```{r}
-# Extentsion that uses dnn
-
-map(phno_iter, function(ii){
-  plt_net_metrics(md = md, phase_i = 'models', phno_i = ii)
+plt_list <- map(phno_iter, function(ii){
+  plt_net_metrics(md = md, phase_i = 'models', phno_i = ii, show_min_loss = TRUE)
   })
 
 
-plt_net_metrics(md = md, phase_i = 'models', phno_i = 'phno_all_Yield_Mg_ha')
+plt_list <- map(plt_list, function(e){
+  e+scale_y_continuous(
+        trans = "log10",
+        breaks = c(0.5, 1, 10, 100, 1000)
+    )+
+    labs(x = '', y = '')
+  })
+
+plt_list[[1]] <- plt_list[[1]]+
+    labs(x = 'Epoch', y = 'Loss (MSE)')
 
 
-# what's up with vnn l relu
-
-tmp_md <- md |>
-  filter(
-    data == 'data_zma_lsuv_relu',
-    phase == 'models', 
-    phno  == 'phno_all_Yield_Mg_ha'
-    )
+p <- plt_list
+names(p) <- phno_iter
 
 
-do.call
-tmp_md$path
+design <- "
+AABE
+AACF
+AADG
+"
 
-
-tmp_dl <- full_join(
-  tmp_md, 
-  do.call(
-    rbind, 
-    map(tmp_md$path, function(ii){mutate(load_model_metrics(ii)$metrics, path=ii)})
-    ) )
-
-
-
-
+(
+  p[["ADHReplicates_hzg"]]+
+  p[["phno_OilDry"]]+
+  p[["phno_ProteinDry"]]+
+  p[["phno_StachyoseDry"]]+ 
+  p[["phno_all_Pollen_GDD__FTaxaREnvRGxE"]]+
+  p[["phno_all_Yield_Mg_ha__FTaxaREnvRGxE"]]+
+  p[["phno_all_Yield_Mg_ha"]]
+)+plot_layout(design = design)
 ```
-
 
 
 ## [_] Err. Prediction
 
+
+
 ```{r}
+md$model |> unique()
+
 md |> 
+  filter(model == 'lin') |>
+  select(info) |> 
+  distinct()
+
+md |>
   filter(
-    phase == 'models'
+    data == 'data_dme', 
+    phno == 'ADHReplicates_hzg',
+    model == 'lin', 
+    info == 'bWGR_yhat'
+    )
+
+tmp <- read_parquet('../data_dme/ADHReplicates_hzg/lin/models/blup/403fe023ad_bWGR_yhat.parquet')
+
+mean((tmp[, 2] - tmp[, 3])**2)
+
+names(tmp) <- c('Taxa', 'Obs', 'YHat', 'Split')
+
+tmp_cs <- tmp |> 
+  filter(Split == 'train') |>
+  summarise(
+    c = mean(Obs), 
+    s = sd(Obs)
+    )
+
+
+tmp |>
+  mutate(YHat = ((YHat * tmp_cs$s) + tmp_cs$c)) |>
+  ggplot(aes(x=Obs, y=YHat))+
+  geom_point()+
+  geom_smooth()+
+  facet_grid(.~Split)
+
+
+tmp |>
+  mutate(YHat = ((YHat * tmp_cs$s) + tmp_cs$c)) |>
+  group_by(Split) |>
+  summarise(MSE = mean((Obs - YHat)**2))
+
+```
+
+
+
+```{r}
+# md
+phase_i = 'models' # always
+phno_i = 'ADHReplicates_hzg'
+# show_min_loss
+
+md |>
+  filter(
+    # data == 'data_dme', 
+    phno == phno_i,
+    model == 'lin', 
+    info == 'bWGR_yhat'
+    )
+
+
+
+
+# plt_net_metrics <- function(md, phno_i, phase_i, show_min_loss = FALSE){
+
+
+
+
+
+
+phno_iter
+
+"ADHReplicates_hzg"                   "phno_all_Pollen_GDD__FTaxaREnvRGxE"  "phno_all_Yield_Mg_ha"               
+[4] "phno_all_Yield_Mg_ha__FTaxaREnvRGxE" "phno_OilDry"                         "phno_ProteinDry"                    
+[7] "phno_StachyoseDry"
+
+phno_i = 'phno_all_Yield_Mg_ha'
+
+
+plt_final_loss(md = md, phno_i = 'phno_all_Yield_Mg_ha__FTaxaREnvRGxE')
+
+plt_final_loss <- function(md, phno_i){
+  # This is the same start as `plt_net_metrics` but 
+  # 1. I filter to the final observations and 
+  # 2. I collect values from the linear models.
+  
+  tmp_md <- md |> 
+    filter(
+      phase == 'models', 
+      info == 'metrics', 
+      phno == phno_i
+    ) 
+  
+  tmp_md <- tmp_md |>
+    mutate(init = case_when(
+      str_detect(data, 'lsuv_relu$') ~ 'l.relu',
+      str_detect(data, 'lsuv_tanh$') ~ 'l.tanh',
+      str_detect(data, 'lsuv_vlin$') ~ 'l.none',
+      TRUE ~ 'r.tanh'
+    )) 
+  
+  # tmp_dl <- map(tmp_md$path, function(ii){mutate(load_model_metrics(ii)$metrics, path=ii)})
+  tmp_dl <- map(tmp_md$path, function(ii){
+    x <- mutate(load_model_metrics(ii)$metrics, path=ii)
+    x <- filter(x, epoch == max(epoch))
+    x$mini_batch <- seq(1, nrow(x))
+    return(x)
+    })
+    
+  tmp_dl <- full_join(tmp_md, do.call(rbind, tmp_dl) )
+  
+  # NOTE without modificaiton to the init field it's best to filter the records
+  # tmp_dl <- tmp_dl |> filter(model == 'vnn')
+  tmp_dl <- tmp_dl |> 
+    mutate(init = paste0(model, '.', init)) 
+  
+  
+  tmp_dl <- full_join(
+    tmp_dl, 
+    expand.grid(
+      phno = phno_i,
+      split = c('trn', 'val'),
+      init = c(
+        'dnn.r.tanh', 
+        'vnn.r.tanh', 
+        'vnn.l.tanh', 
+        'vnn.l.relu',
+        'vnn.l.none'
+    )
+    )) |>  
+    mutate(init = factor(init, levels = c(
+      'dnn.r.tanh', 
+      'vnn.r.tanh', 
+      'vnn.l.tanh', 
+      'vnn.l.relu',
+      'vnn.l.none'
+    )))
+  
+  # tmp_dl
+  # == == == == #  
+  tmp_md <- md |> 
+    filter(
+      phase == phase_i, 
+      info == 'bWGR_yhat', 
+      phno == phno_i, 
+      model == 'lin'
+    ) 
+  
+  load_bWGR_yhat <- function(
+      path = '../data_dme/ADHReplicates_hzg/lin/models/blup/403fe023ad_bWGR_yhat.parquet'
+  ){
+    metrics <- read_parquet(path)
+    names(metrics) <- c('taxa', 'obs', 'yhat', 'split')
+    # set yhat to be a vector instead of a 1d matrix to prevent it showing as 
+    # yhat[,1] in the tibble header
+    metrics$yhat <- as.vector(metrics$yhat)
+    metrics <- metrics |> 
+      mutate(split = case_when(
+        split == 'train' ~ 'trn', 
+        split == 'test'  ~ 'val'
+      ))
+    return(metrics)
+  }
+  
+  tmp_lm <- map(tmp_md$path, function(ii){mutate(load_bWGR_yhat(ii), path=ii)})
+  
+  tmp_lm <- full_join(tmp_md, do.call(rbind, tmp_lm) )
+  
+  tmp_lm <- tmp_lm |> 
+    mutate(init = 'none') |> 
+    mutate(init = paste0(model, '.', init)) 
+  
+  
+  # Are the values in tmp_lm centered and scaled? 
+  # It looks like they are not:
+  # tmp_lm |>
+  #   group_by(path, split) |>
+  #   summarise(
+  #     o_c = mean(obs),
+  #     o_s = sd(obs),
+  #     y_c = mean(yhat),
+  #     y_s = sd(yhat)
+  #     ) |>
+  #   arrange(split, path)
+  # 
+  
+  # # A tibble: 12 × 6
+  # # Groups:   path [6]
+  #    path                                                                     split   o_c   o_s   y_c   y_s
+  #    <chr>                                                                    <chr> <dbl> <dbl> <dbl> <dbl>
+  #  1 ../data_gmx/phno_ProteinDry/lin/models/blup/361ee2ff57_bWGR_yhat.parquet trn    44.2  2.21  44.2  1.55
+  #  2 ../data_gmx/phno_ProteinDry/lin/models/blup/58d298935f_bWGR_yhat.parquet trn    44.2  2.24  44.2  1.57
+  #  3 ../data_gmx/phno_ProteinDry/lin/models/blup/656a758935_bWGR_yhat.parquet trn    44.2  2.21  44.2  1.52
+  #  4 ../data_gmx/phno_ProteinDry/lin/models/blup/6e08bcfa2b_bWGR_yhat.parquet trn    44.1  2.26  44.1  1.64
+  #  5 ../data_gmx/phno_ProteinDry/lin/models/blup/7c2d03c704_bWGR_yhat.parquet trn    44.2  2.22  44.2  1.55
+  #  6 ../data_gmx/phno_ProteinDry/lin/models/blup/8132724e66_bWGR_yhat.parquet trn    44.2  2.24  44.2  1.56
+  #  7 ../data_gmx/phno_ProteinDry/lin/models/blup/361ee2ff57_bWGR_yhat.parquet val    44.1  2.40  43.8  2.07
+  #  8 ../data_gmx/phno_ProteinDry/lin/models/blup/58d298935f_bWGR_yhat.parquet val    43.7  1.82  43.4  1.37
+  #  9 ../data_gmx/phno_ProteinDry/lin/models/blup/656a758935_bWGR_yhat.parquet val    44.3  2.49  44.3  2.03
+  # 10 ../data_gmx/phno_ProteinDry/lin/models/blup/6e08bcfa2b_bWGR_yhat.parquet val    44.6  2.10  44.5  1.55
+  # 11 ../data_gmx/phno_ProteinDry/lin/models/blup/7c2d03c704_bWGR_yhat.parquet val    44.2  2.21  44.3  1.12
+  # 12 ../data_gmx/phno_ProteinDry/lin/models/blup/8132724e66_bWGR_yhat.parquet val    44.3  1.77  44.1  1.48  
+  
+  # so I need to cs the data before reporting it
+  tmp_lm <- left_join(
+    tmp_lm, 
+    (
+      tmp_lm |>
+        filter(split == 'trn') |>
+        group_by(path) |>
+        summarise(o_c = mean(obs), o_s = sd(obs)) 
+     )
+  )
+  
+  # center and scale and then reduce down to mse
+  tmp_lm <- tmp_lm |> 
+    ungroup() |>
+    mutate(
+      obs = ((obs - o_c) / o_s),
+      yhat= ((yhat- o_c) / o_s), 
+      ) |>
+    group_by(path, split) |>
+    mutate(mse = mean((obs - yhat)**2) ) |>
+    select(-taxa, -obs, -yhat, -o_c, -o_s) |>
+    distinct()
+
+  
+  tmp_lm
+  
+  # FIXME - doesn't need a fix but should be aware of this
+  # NOTE this is not going to be exactly the same as the error calculated from 
+  # the predictions because 
+  # 1. we have mini batches of (potentially) unequal size
+  # 2. we have mini batches calculated in _training_ mode.  
+  # The upside to running this is that we don't need to do the full prediction 
+  # set before getting a sense of which are good/bad models.
+
+  tmp_dl <- tmp_dl |>
+    select(-epoch, -step, -mini_batch) |>
+    group_by(path, split) |>
+    mutate(loss = mean(loss)) |>
+    distinct()
+  
+  
+  tmp_all <- full_join(
+    (tmp_lm |> 
+       ungroup() |>
+       select(data, phno, model, phase, 
+              # version, info, path, hash, 
+              split, init, mse)),
+    (tmp_dl |>
+       ungroup() |>
+       select(data, phno, model, phase, 
+              # version, info, path, hash, 
+              split, init, loss) |>
+       rename(mse = loss))
+  )
+  
+  
+  tmp_all |> 
+    ggplot(aes(x = init, y = mse, fill = split))+
+    geom_boxplot()+
+    geom_point(position = position_dodge(width=0.751) )+
+    scale_y_log10()
+    
+    
+    
+    
+    
+  
+  
+  
+  # == == == == # 
+  tmp_dl_envelope <- tmp_dl |>
+    filter(split == 'trn') |>
+    # filter(model == 'vnn', split == 'trn') |>
+    group_by(data, phno, model, init, split, epoch) |>
+    mutate(
+      min_trn = case_when(split == 'trn' ~ min(loss)),
+      max_trn = case_when(split == 'trn' ~ max(loss)) )   |>
+    select(-loss, -step) |>
+    distinct()
+  
+  
+  if (phase_i == 'lightning'){
+    # color by percent of trials
+    # plt <- tmp_dl |>
+    #   filter(split == 'val') |>
+    #   mutate(v = as.numeric(str_extract(version, '\\d+$'))) |>
+    #   group_by(data, phno, model, phase, init) |>
+    #   mutate(pr.trial = v/max(v)) |>
+    #   ggplot(aes(x = epoch, group = path))+
+    #   geom_ribbon(data=tmp_dl_envelope, aes(ymin=min_trn, ymax=max_trn), alpha = 0.3)+
+    #   geom_line(aes(y = loss, color =  pr.trial))+
+    #   theme_minimal()+
+    #   facet_grid(phno~init)
+    
+    # Show last entry
+    plt <- tmp_dl |>
+      filter(split == 'val') |>
+      mutate(v = as.numeric(str_extract(version, '\\d+$'))) |>
+      group_by(data, phno, model, phase, init) |>
+      mutate(last.trial = case_when(v == max(v) ~ TRUE, 
+                                    TRUE ~ FALSE)) |>
+      arrange(epoch, step) |>
+      ggplot(aes(x = epoch, group = path))+
+      geom_ribbon(data=tmp_dl_envelope, aes(ymin=min_trn, ymax=max_trn), alpha = 0.3)+
+      geom_line(aes(y = loss, color =  last.trial), alpha = 0.3)+
+      theme_minimal()+
+      facet_grid(phno~init)+
+      scale_color_manual(values = c('lightgrey', 'firebrick'))+
+      theme(legend.position = 'none')
+
+  } else if (phase_i == 'models'){
+    
+    plt <- tmp_dl |>
+      filter(split == 'val') |>
+      arrange(epoch, step) |>
+      # filter(model == 'vnn', split == 'val') |>
+      ggplot(aes(x = epoch, group = path))+
+      geom_ribbon(data=tmp_dl_envelope, aes(ymin=min_trn, ymax=max_trn), alpha = 0.3)+
+      geom_line(aes(y = loss))+
+      theme_minimal()+
+      # coord_cartesian(xlim = c(0, 1))+
+      facet_grid(phno~init)
+  }
+  
+  if(show_min_loss == TRUE){
+    # find the lowest validation observation and adorn all the plots
+  
+    tmp_dl_hline <- tmp_dl |>
+      filter(split == 'val') |>
+      arrange(epoch, step)
+    
+    tmp_dl_hline <- left_join(
+      (tmp_dl_hline |>
+         group_by(data, phno, model, phase, init) |>
+         summarize(loss = min(loss, na.rm = T)) |>
+         ungroup()),
+      tmp_dl_hline
+    ) |> 
+      ungroup() |>
+      mutate(min_loss = min(loss, na.rm = T))
+    
+    
+    # plt <- tmp_dl |>
+    #     filter(split == 'val') |>
+    #     arrange(epoch, step) |>
+    #     # filter(model == 'vnn', split == 'val') |>
+    #     ggplot(aes(x = epoch, group = path))+
+    #     geom_ribbon(data=tmp_dl_envelope, aes(ymin=min_trn, ymax=max_trn), alpha = 0.3)+
+    #     geom_line(aes(y = loss))+
+    #     theme_minimal()+
+    #     # coord_cartesian(xlim = c(0, 1))+
+    #     facet_grid(phno~init)+
+    #     scale_y_continuous(
+    #         trans = "log10",
+    #         breaks = c(0.5, 1, 10, 100, 1000)
+    #     )
+    
+    plt <- plt+geom_hline(
+      data = tmp_dl_hline, 
+      aes(yintercept = min_loss), 
+      color = 'cornflowerblue', 
+      linetype = 'solid'
+    )+
+      geom_segment(
+        data = tmp_dl_hline, 
+        aes(x = epoch, y = loss, xend = epoch, yend = min_loss),
+        arrow = arrow(length = unit(5, "pt"), type = "closed"),
+        color = "orange",
+        # size = 1.5,
+        linetype = 'solid'
+      )
+  }
+  
+  return(plt)
+}
+
+
+
+```
+
+
+## [_] Predictions
+```{r}
+## New functions:
+
+
+pred_parquet_to_df <- function(paths = unlist(mdi[, 'path']), model_type = 'dnn'){
+  ## Turn output into a single table
+  res_l <- map(paths, function(ij_path){ 
+    read_parquet(ij_path) 
+  })
+  
+  res_l <- map(seq_along(res_l), function(i){
+    e <- res_l[[i]]
+    names(e) <- tolower(names(e))
+    e <- e |> mutate(join_this = TRUE)
+    return(e)
+  })
+  names(res_l) <- as.vector(unlist(mdi[, 'info']))
+  
+  # BLUP output
+  if(model_type == 'lin'){
+    if(assertthat::are_equal(length(res_l), 1)){
+      res <- res_l[[1]]
+      res$yhat <- as.vector(res$yhat)
+      names(res)[2] <- 'obs'
+      res <- res |>
+        select(-join_this) |>
+        select(taxa, split, obs, yhat)
+    }
+  } else {
+    # [vd]nn output
+    # update names so these tables merge nicely
+    names(res_l$yvar_cs_center)[1] <- 'yvar_mu'
+    names(res_l$yvar_cs_scale)[1]  <- 'yvar_sd'
+    
+    names(res_l$yhat_trn)[1] <- 'yhat'
+    names(res_l$yhat_val)[1] <- 'yhat'
+    
+    names(res_l$yhat_cs_trn)[1] <- 'yhat_cs'
+    names(res_l$yhat_cs_val)[1] <- 'yhat_cs'
+    
+    names(res_l$yvar_cs_trn)[1] <- 'obs_cs'
+    names(res_l$yvar_cs_val)[1] <- 'obs_cs'
+    
+    res <- full_join(res_l$yvar_cs_center, res_l$yvar_cs_scale) |>
+      full_join(rbind(res_l$yhat_trn,    res_l$yhat_val   )) |>
+      full_join(rbind(res_l$yhat_cs_trn, res_l$yhat_cs_val)) |>
+      full_join(rbind(res_l$yvar_cs_trn, res_l$yvar_cs_val)) |>
+      select(-join_this) |>
+      select(taxa, phno_idx, split, obs_cs, yvar_mu, yvar_sd, yhat, yhat_cs)
+    
+  }
+  return(res)
+}
+
+# since I can't use do.call with full_join, here's a work around
+full_join_list <- function(lst){
+  for(i in seq_along(lst)){
+    if(i == 1){
+      out <- lst[[i]]
+    } else {
+      out <- full_join(out, lst[[i]])
+    }
+  }
+  return(out)
+}
+
+
+
+## Processing:
+
+
+# md
+phase_i = 'models' # always
+phno_i = 'phno_all_Pollen_GDD__FTaxaREnvRGxE'
+# show_min_loss
+
+
+md1 <- md |>
+  filter(
+    phno == phno_i,
+    phase == phase_i,
+    # don't use model history or evaluation
+    (stringr::str_detect(info, 'eval_', negate = T) & (info != 'metrics')) 
     ) |>
-  select(info) |>
-  distinct() |> print(n=24)
+  select(-phno, -phase, -version)
+
+# process each data:model:hash
+# here are the blocks of files I need to opperate over.
+md1_blocks <- md1 |> 
+  select(model, data, hash) |> 
+  distinct() |>
+  mutate(model = factor(model, levels = c('lin', 'dnn', 'vnn'))) |>
+  arrange(model, data, hash) |>
+  mutate(model = as.character(model))
 
 
-info %in% c(
-  'yhat_cs_val',
-  'yhat_val',
-  'yvar_cs_center',
-  'yvar_cs_scale',
-  'yvar_cs_val',
-  'yvar_cs_trn',
-  'yvar_val',
-  'yhat_cs_trn',
-  'yvar_trn',
-  'yhat_trn',
-  'bWGR_yhat'
+
+out_l <- list()
+for(i in seq(1, nrow(md1_blocks))){
+  mdi <- left_join(md1_blocks[i, ], md1)
+  out <- cbind(
+    md1_blocks[i, ],
+    pred_parquet_to_df(
+      paths = unlist(mdi[, 'path']), 
+      model_type = unique(unlist(mdi[, 'model']))
+    )
+  )
+  out_l[[(length(out_l)+1)]] <- out
+}
+
+out <- full_join_list(lst = out_l)
+
+
+out <- out |> 
+  mutate(
+  split = case_when(
+    split %in% c('train', 'Training') ~ 'trn', 
+    split %in% c('test', 'Validation') ~ 'val' 
+    )
 )
 
 
 
-   <chr>                                                
- 1 metrics                                              
- 2 yhat_cs_val                                          
- 3 yhat_val                                             
- 4 yvar_cs_center                                       
- 5 yvar_cs_scale                                        
- 6 yvar_cs_val                                          
- 7 yvar_cs_trn                                          
- 8 yvar_val                                             
- 9 yhat_cs_trn                                          
-10 yvar_trn                                             
-11 yhat_trn                                             
-12 eval_salience_snpwise_val                            
-13 eval_gradients_nodewise_weights                      
-14 eval_gradients_nodewise_bias                         
-15 eval_salience_snpwise_trn                            
-16 eval_salience_genewise_val                           
-17 eval_rho_nodewise_val                                
-18 eval_rho_nodewise_trn                                
-19 eval_salience_genewise_trn                           
-20 
+
+# can I use the information in out to get a reasonable estimate of error for all?
+
+out |>
+  filter(
+    model == 'lin',
+    data == 'data_zma',
+    hash == '186490dd78',
+    split == 'val'
+  ) |>
+  summarise(mse = mean((obs - yhat)**2))
+  
+
+mse_summary_lin <- out |>
+  filter(model == 'lin') |>
+  mutate(SE = (obs - yhat)**2 ) |>
+  group_by(model, data, hash, split) |>
+  filter(!is.na(SE)) |>
+  summarise(MSE = mean(SE))
+  
+
+out |>
+  filter(
+    model != 'lin',
+    data == 'data_zma',
+    # hash == '186490dd78',
+    split == 'val'
+  ) |> 
+  # mutate(yhat_rmcs =( (yhat_cs * yvar_sd) + yvar_mu)) # sanity check worked :)
+  mutate(obs_rmcs =( (obs_cs * yvar_sd) + yvar_mu))
+
+
+mse_summary_dnn <- out |>
+  filter(model != 'lin') |>
+  mutate(obs_rmcs =( (obs_cs * yvar_sd) + yvar_mu)) |>
+  mutate(SE = (obs_rmcs - yhat)**2 ) |>
+  group_by(model, data, hash, split) |>
+  filter(!is.na(SE)) |>
+  summarise(MSE = mean(SE))
+
+
+M <- rbind(mse_summary_lin, mse_summary_dnn)
+
+M |> 
+  ggplot(aes(x = interaction(model, data), y = MSE, color = split))+
+  geom_boxplot()+
+  geom_point()+
+  scale_y_log10()
+
+
+
+
+
+
+
+
+
+
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# prefix <- '../data_zma/phno_all_Yield_Mg_ha/vnn/models/vnn/version_0/0e9a1cb339'
+# 
+# blup <- read_parquet(paste0(prefix, '_bWGR_yhat.parquet'))
+# 
+# yhat_cs_trn   <- read_parquet(paste0(prefix, '_yhat_cs_trn.parquet'))
+# yhat_cs_val   <- read_parquet(paste0(prefix, '_yhat_cs_val.parquet'))
+# yhat_val      <- read_parquet(paste0(prefix, '_yhat_val.parquet'))
+# 
+# 
+# 
+# yvar_cs_trn   <- read_parquet(paste0(prefix, '_yvar_cs_trn.parquet'))
+# yvar_cs_val   <- read_parquet(paste0(prefix, '_yvar_cs_val.parquet'))
+# 
+# yvar_cs_scale <- read_parquet(paste0(prefix, '_yvar_cs_scale.parquet'))
+# yvar_cs_center<- read_parquet(paste0(prefix, '_yvar_cs_center.parquet'))
+# 
+# yvar_trn      <- read_parquet(paste0(prefix, '_yvar_trn.parquet'))
+# yvar_val      <- read_parquet(paste0(prefix, '_yvar_val.parquet'))
+# 
+# 
+# head((yvar_trn$Yield_Mg_ha * yvar_cs_scale$Yield_Mg_ha) + yvar_cs_center$Yield_Mg_ha )
+# 
+# 
+# plot(yvar_cs_trn$Yield_Mg_ha, yvar_trn$Yield_Mg_ha)
+# 
+# 
+# 
+# 
+# 
+# # plt_net_metrics <- function(md, phno_i, phase_i, show_min_loss = FALSE){
+# md |>
+#   filter(
+#     data == 'data_zma',
+#     phno == phno_i,
+#     # model == 'lin',
+#     model == 'vnn',
+#     phase == phase_i,
+#     version == 'version_0'
+#     # info == 'bWGR_yhat'
+#     ) |>
+#   select(path)
+
+
+  
+```
+
+
+## [_] Interpretation
+```{r}
+phno_i
+
+
+
+x <- list.files('../data_zma_lsuv_tanh/phno_all_Pollen_GDD__FTaxaREnvRGxE/vnn/models/vnn/version_0/')
+x <- x[str_detect(x, 'eval')]
+x <- x[str_detect(x, 'parquet')]
+
+prefix <- '../data_zma_lsuv_tanh/phno_all_Pollen_GDD__FTaxaREnvRGxE/vnn/models/vnn/version_0/da6512e68f'
+
+
+gradients_nodewise_bias    <- read_parquet(paste0(prefix, '_eval_gradients_nodewise_bias.parquet'))
+gradients_nodewise_weights <- read_parquet(paste0(prefix, '_eval_gradients_nodewise_weights.parquet'))
+rho_nodewise_trn           <- read_parquet(paste0(prefix, '_eval_rho_nodewise_trn.parquet'))
+rho_nodewise_val           <- read_parquet(paste0(prefix, '_eval_rho_nodewise_val.parquet'))
+salience_genewise_trn      <- read_parquet(paste0(prefix, '_eval_salience_genewise_trn.parquet'))
+salience_genewise_val      <- read_parquet(paste0(prefix, '_eval_salience_genewise_val.parquet'))
+salience_snpwise_trn       <- read_parquet(paste0(prefix, '_eval_salience_snpwise_trn.parquet'))
+salience_snpwise_val       <- read_parquet(paste0(prefix, '_eval_salience_snpwise_val.parquet'))
 
 ```
+
 
 
 
