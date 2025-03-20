@@ -824,32 +824,34 @@ xx <- list(
   c("vnn", "data_zma_lsuv_tanh", "phno_all_Pollen_GDD__FTaxaREnvRGxE", "VNN Relu LSUV"), 
   c("vnn", "data_zma_lsuv_vlin", "phno_all_Pollen_GDD__FTaxaREnvRGxE", "VLN LSUV") 
   )
-plt_list <- map(seq_along(xx), function(i){
-  plt <- plt_hyps(
-    df = filter(
-      M,
-      model == xx[[i]][1],
-      exp == xx[[i]][2],
-      phn == xx[[i]][3]
-      )
-    )
-  plt <- plt + labs(title = xx[[i]][4])
-  if(i < length(xx)){
-    plt <- plt + theme(legend.position = 'none')
-  }
-  return(plt)
-})
-
-p <- plt_list 
 
 
-
-design <- "ABCDE"
-
-p <- (p[[1]]+p[[2]]+p[[3]]+p[[4]]+p[[5]])+plot_layout(design = design)
-
-poster_0hyps_1grid <- p
-ggsave('poster_0hyps_1grid.svg', p, width = 30, height = 5, units = 'in')
+# plt_list <- map(seq_along(xx), function(i){
+#   plt <- plt_hyps(
+#     df = filter(
+#       M,
+#       model == xx[[i]][1],
+#       exp == xx[[i]][2],
+#       phn == xx[[i]][3]
+#       )
+#     )
+#   plt <- plt + labs(title = xx[[i]][4])
+#   if(i < length(xx)){
+#     plt <- plt + theme(legend.position = 'none')
+#   }
+#   return(plt)
+# })
+# 
+# p <- plt_list 
+# 
+# 
+# 
+# design <- "ABCDE"
+# 
+# p <- (p[[1]]+p[[2]]+p[[3]]+p[[4]]+p[[5]])+plot_layout(design = design)
+# 
+# poster_0hyps_1grid <- p
+# ggsave('poster_0hyps_1grid.svg', p, width = 30, height = 5, units = 'in')
 
 
 
@@ -858,52 +860,124 @@ ggsave('poster_0hyps_1grid.svg', p, width = 30, height = 5, units = 'in')
 
 ```
 
+### xx
+```{r}
+xx <- data.frame(list(
+  c("data_dme", "ADHReplicates_hzg"),
+  c("data_gmx", "phno_ProteinDry"),
+  c("data_gmx", "phno_StachyoseDry"),
+  c("data_gmx", "phno_OilDry"),
+  c("data_zma", "phno_all_Pollen_GDD__FTaxaREnvRGxE"),
+  c("data_zma", "phno_all_Yield_Mg_ha"),
+  c("data_zma", "phno_all_Yield_Mg_ha__FTaxaREnvRGxE")
+)) |> t()
+
+xx <- data.frame(
+  exp = as.vector(xx[, 1]),
+  phn = as.vector(xx[, 2])
+)
+
+```
+
 
 ```{r}
 # abstract out
 
 # 250228 now that the maize meeting is off, this is going to be poorly named and hastely done - sorry future daniel. 
-"data_dme"       
-
-"data_gmx"
 
 
-xx_exp = "data_zma"
-
-mk_hyps_block <- 
 
 
-xx <- list(
-  c("dnn", paste0(xx_exp, ''),           "phno_all_Pollen_GDD__FTaxaREnvRGxE", "DNN Tanh"),
-  c("vnn", paste0(xx_exp, ''),           "phno_all_Pollen_GDD__FTaxaREnvRGxE", "VNN Tanh"),
-  c("vnn", paste0(xx_exp, '_lsuv_relu'), "phno_all_Pollen_GDD__FTaxaREnvRGxE", "VNN Tanh LSUV"),
-  c("vnn", paste0(xx_exp, '_lsuv_tanh'), "phno_all_Pollen_GDD__FTaxaREnvRGxE", "VNN Relu LSUV"), 
-  c("vnn", paste0(xx_exp, '_lsuv_vlin'), "phno_all_Pollen_GDD__FTaxaREnvRGxE", "VLN LSUV") 
+
+mk_hyps_block <- function(M = M, xx_exp = "data_zma", xx_trait = "phno_all_Pollen_GDD__FTaxaREnvRGxE"){
+  
+  yy <- list(
+    c("dnn", paste0(xx_exp, ''),           xx_trait, "DNN Tanh"),
+    c("vnn", paste0(xx_exp, ''),           xx_trait, "VNN Tanh"),
+    c("vnn", paste0(xx_exp, '_lsuv_tanh'), xx_trait, "VNN Tanh LSUV"),
+    c("vnn", paste0(xx_exp, '_lsuv_relu'), xx_trait, "VNN Relu LSUV"), 
+    c("vnn", paste0(xx_exp, '_lsuv_vlin'), xx_trait, "VLN LSUV") 
   )
-plt_list <- map(seq_along(xx), function(i){
-  plt <- plt_hyps(
-    df = filter(
-      M,
-      model == xx[[i]][1],
-      exp == xx[[i]][2],
-      phn == xx[[i]][3]
+  plt_list <- map(seq_along(yy), function(j){
+    plt <- plt_hyps(
+      df = filter(
+        M,
+        model == yy[[j]][1],
+        exp == yy[[j]][2],
+        phn == yy[[j]][3]
       )
     )
-  plt <- plt + labs(title = xx[[i]][4])
-  if(i < length(xx)){
-    plt <- plt + theme(legend.position = 'none')
-  }
-  return(plt)
+    plt <- plt + labs(title = yy[[j]][4])
+    if(j < length(yy)){
+      plt <- plt + theme(legend.position = 'none')
+    }
+    return(plt)
+  })
+  
+  return(plt_list)
+  
+}
+
+
+
+
+
+tmp_fn <- function(M = M, 
+                   xx_exp = "data_zma", 
+                   xx_trait = "phno_all_Pollen_GDD__FTaxaREnvRGxE"){
+  p <- mk_hyps_block(M = M, xx_exp = xx_exp, xx_trait = xx_trait)
+  design <- "ABCDE"
+  p <- (p[[1]]+p[[2]]+p[[3]]+p[[4]]+p[[5]])+plot_layout(design = design)
+  return(p)
+}
+
+
+all_plts <- map(
+  seq(1, nrow(xx)), function(i){
+  tmp_fn(M = M,
+         xx_exp = xx[i, 'exp'], 
+         xx_trait = xx[i, 'phn']
+         )  
 })
 
-return(plt_list)
+walk(
+  seq(1, nrow(xx)), function(i){
+    p <- all_plts[[i]]
+    ggsave(paste0('paper_0hyps_1grid_', xx[i, 'exp'], '-', xx[i, 'phn'], '.svg'), 
+           p,  width = 30, height = 5, units = 'in')
+})
 
 
+walk(
+  seq(1, nrow(xx)), function(i){
+    p <- all_plts[[i]]
+    ggsave(paste0('paper_0hyps_1grid_', xx[i, 'exp'], '-', xx[i, 'phn'], '.png'), 
+           p,  width = 30, height = 5, units = 'in')
+})
 
-
-p <- plt_list 
-
-
+# names(all_plts) <- xx$phn
+# 
+# p <- all_plts
+# 
+# design <- "
+# A
+# B
+# C
+# D
+# E
+# F
+# G
+# "
+# 
+# (
+#   p[["ADHReplicates_hzg"]]+
+#   p[["phno_OilDry"]]+
+#   p[["phno_ProteinDry"]]+
+#   p[["phno_StachyoseDry"]]+ 
+#   p[["phno_all_Pollen_GDD__FTaxaREnvRGxE"]]+
+#   p[["phno_all_Yield_Mg_ha__FTaxaREnvRGxE"]]+
+#   p[["phno_all_Yield_Mg_ha"]]
+# )+plot_layout(design = design)
 
 ```
 
@@ -916,30 +990,155 @@ p <- plt_list
 
 ```{r}
 # for poster
+# p <- plt_net_metrics(md = md, phase_i = 'lightning', phno_i = 'phno_all_Pollen_GDD__FTaxaREnvRGxE')
+# p <- p+scale_y_continuous(
+#         trans = "log10",
+#         breaks = c(0.5, 1, 10, 100, 1000)
+#     )+
+#     labs(x = '', y = '')+
+#   facet_grid(phno~init, labeller = labeller(
+#   # .default = capitalize,
+#   phno = c(phno_all_Pollen_GDD__FTaxaREnvRGxE = "Pollen GDD Est."),
+#   init = c(
+#     dnn.r.tanh = 'DNN Tanh',
+#     vnn.r.tanh = 'VNN Tanh',
+#     vnn.l.tanh = 'VNN Tanh LSUV',
+#     vnn.l.relu = 'VNN Relu LSUV',
+#     vnn.l.none = 'VLN LSUV'
+#   )
+# ))
+# 
+# p
+# 
+# poster_0hyps_2trace <- p
+# ggsave('poster_0hyps_2trace.svg', p, width = 15, height = 5, units = 'in')
+
+
+
+
+
+
+
+# Poorly abstracted because of relabeling
+
+
+p <- plt_net_metrics(md = md, phase_i = 'lightning', phno_i = 'ADHReplicates_hzg')
+p <- p+scale_y_continuous(
+        trans = "log10",
+        breaks = c(0.5, 1, 10, 100, 1000))+
+    labs(x = '', y = '')+
+  facet_grid(phno~init, labeller = labeller(
+  phno = c(ADHReplicates_hzg = "ADH Slope"),
+  init = c(
+    dnn.r.tanh = 'DNN Tanh',
+    vnn.r.tanh = 'VNN Tanh',
+    vnn.l.tanh = 'VNN Tanh LSUV',
+    vnn.l.relu = 'VNN Relu LSUV',
+    vnn.l.none = 'VLN LSUV') ))
+ggsave('paper_0hyps_2trace_data_dme-ADHReplicates_hzg.svg', p, width = 30, height = 5, units = 'in')
+ggsave('paper_0hyps_2trace_data_dme-ADHReplicates_hzg.png', p, width = 30, height = 5, units = 'in')
+
+
+p <- plt_net_metrics(md = md, phase_i = 'lightning', phno_i = 'phno_ProteinDry')
+p <- p+scale_y_continuous(
+        trans = "log10",
+        breaks = c(0.5, 1, 10, 100, 1000))+
+    labs(x = '', y = '')+
+  facet_grid(phno~init, labeller = labeller(
+  phno = c(phno_ProteinDry = "Protein Dry"),
+  init = c(
+    dnn.r.tanh = 'DNN Tanh',
+    vnn.r.tanh = 'VNN Tanh',
+    vnn.l.tanh = 'VNN Tanh LSUV',
+    vnn.l.relu = 'VNN Relu LSUV',
+    vnn.l.none = 'VLN LSUV') ))
+ggsave('paper_0hyps_2trace_data_gmx-phno_ProteinDry.svg', p, width = 30, height = 5, units = 'in')
+ggsave('paper_0hyps_2trace_data_gmx-phno_ProteinDry.png', p, width = 30, height = 5, units = 'in')
+
+
+p <- plt_net_metrics(md = md, phase_i = 'lightning', phno_i = 'phno_StachyoseDry')
+p <- p+scale_y_continuous(
+        trans = "log10",
+        breaks = c(0.5, 1, 10, 100, 1000))+
+    labs(x = '', y = '')+
+  facet_grid(phno~init, labeller = labeller(
+  phno = c(phno_StachyoseDry = "Stachyose Dry"),
+  init = c(
+    dnn.r.tanh = 'DNN Tanh',
+    vnn.r.tanh = 'VNN Tanh',
+    vnn.l.tanh = 'VNN Tanh LSUV',
+    vnn.l.relu = 'VNN Relu LSUV',
+    vnn.l.none = 'VLN LSUV') ))
+ggsave('paper_0hyps_2trace_data_gmx-phno_StachyoseDry.svg', p, width = 30, height = 5, units = 'in')
+ggsave('paper_0hyps_2trace_data_gmx-phno_StachyoseDry.png', p, width = 30, height = 5, units = 'in')
+
+
+p <- plt_net_metrics(md = md, phase_i = 'lightning', phno_i = 'phno_OilDry')
+p <- p+scale_y_continuous(
+        trans = "log10",
+        breaks = c(0.5, 1, 10, 100, 1000))+
+    labs(x = '', y = '')+
+  facet_grid(phno~init, labeller = labeller(
+  phno = c(phno_OilDry = "Oil Dry"),
+  init = c(
+    dnn.r.tanh = 'DNN Tanh',
+    vnn.r.tanh = 'VNN Tanh',
+    vnn.l.tanh = 'VNN Tanh LSUV',
+    vnn.l.relu = 'VNN Relu LSUV',
+    vnn.l.none = 'VLN LSUV') ))
+ggsave('paper_0hyps_2trace_data_gmx-phno_OilDry.svg', p, width = 30, height = 5, units = 'in')
+ggsave('paper_0hyps_2trace_data_gmx-phno_OilDry.png', p, width = 30, height = 5, units = 'in')
 
 
 p <- plt_net_metrics(md = md, phase_i = 'lightning', phno_i = 'phno_all_Pollen_GDD__FTaxaREnvRGxE')
 p <- p+scale_y_continuous(
         trans = "log10",
-        breaks = c(0.5, 1, 10, 100, 1000)
-    )+
+        breaks = c(0.5, 1, 10, 100, 1000))+
     labs(x = '', y = '')+
   facet_grid(phno~init, labeller = labeller(
-  # .default = capitalize,
   phno = c(phno_all_Pollen_GDD__FTaxaREnvRGxE = "Pollen GDD Est."),
   init = c(
     dnn.r.tanh = 'DNN Tanh',
     vnn.r.tanh = 'VNN Tanh',
     vnn.l.tanh = 'VNN Tanh LSUV',
     vnn.l.relu = 'VNN Relu LSUV',
-    vnn.l.none = 'VLN LSUV'
-  )
-))
+    vnn.l.none = 'VLN LSUV') ))
+ggsave('paper_0hyps_2trace_data_zma-phno_all_Pollen_GDD__FTaxaREnvRGxE.svg', p, width = 30, height = 5, units = 'in')
+ggsave('paper_0hyps_2trace_data_zma-phno_all_Pollen_GDD__FTaxaREnvRGxE.png', p, width = 30, height = 5, units = 'in')
 
-p
 
-poster_0hyps_2trace <- p
-ggsave('poster_0hyps_2trace.svg', p, width = 15, height = 5, units = 'in')
+p <- plt_net_metrics(md = md, phase_i = 'lightning', phno_i = 'phno_all_Yield_Mg_ha')
+p <- p+scale_y_continuous(
+        trans = "log10",
+        breaks = c(0.5, 1, 10, 100, 1000))+
+    labs(x = '', y = '')+
+  facet_grid(phno~init, labeller = labeller(
+  phno = c(phno_all_Yield_Mg_ha = "Yield Mg per ha"),
+  init = c(
+    dnn.r.tanh = 'DNN Tanh',
+    vnn.r.tanh = 'VNN Tanh',
+    vnn.l.tanh = 'VNN Tanh LSUV',
+    vnn.l.relu = 'VNN Relu LSUV',
+    vnn.l.none = 'VLN LSUV') ))
+ggsave('paper_0hyps_2trace_data_zma-phno_all_Yield_Mg_ha.svg', p, width = 30, height = 5, units = 'in')
+ggsave('paper_0hyps_2trace_data_zma-phno_all_Yield_Mg_ha.png', p, width = 30, height = 5, units = 'in')
+
+
+p <- plt_net_metrics(md = md, phase_i = 'lightning', phno_i = 'phno_all_Yield_Mg_ha__FTaxaREnvRGxE')
+p <- p+scale_y_continuous(
+        trans = "log10",
+        breaks = c(0.5, 1, 10, 100, 1000))+
+    labs(x = '', y = '')+
+  facet_grid(phno~init, labeller = labeller(
+  phno = c(phno_all_Yield_Mg_ha__FTaxaREnvRGxE = "Yield Mg per ha Est."),
+  init = c(
+    dnn.r.tanh = 'DNN Tanh',
+    vnn.r.tanh = 'VNN Tanh',
+    vnn.l.tanh = 'VNN Tanh LSUV',
+    vnn.l.relu = 'VNN Relu LSUV',
+    vnn.l.none = 'VLN LSUV') ))
+ggsave('paper_0hyps_2trace_data_zma-phno_all_Yield_Mg_ha__FTaxaREnvRGxE.svg', p, width = 30, height = 5, units = 'in')
+ggsave('paper_0hyps_2trace_data_zma-phno_all_Yield_Mg_ha__FTaxaREnvRGxE.png', p, width = 30, height = 5, units = 'in')
 
 
 ```
@@ -1097,7 +1296,7 @@ AADG
 ```
 
 
-```{r}
+```{r, eval=FALSE}
 # for poster
 
 p <- plt_net_metrics(md = md, phase_i = 'models', phno_i = 'phno_all_Pollen_GDD__FTaxaREnvRGxE', show_min_loss = TRUE)
@@ -1122,6 +1321,132 @@ p
 poster_1mods_2trace <- p
 ggsave('poster_1mods_2trace.svg', p, width = 15, height = 5, units = 'in')
 ```
+
+
+```{r}
+
+# Poorly abstracted because of relabeling
+
+
+p <- plt_net_metrics(md = md, phase_i = 'models', phno_i = 'ADHReplicates_hzg', show_min_loss = TRUE)
+p <- p+scale_y_continuous(
+        trans = "log10",
+        breaks = c(0.5, 1, 10, 100, 1000))+
+    labs(x = '', y = '')+
+  facet_grid(phno~init, labeller = labeller(
+  phno = c(ADHReplicates_hzg = "ADH Slope"),
+  init = c(
+    dnn.r.tanh = 'DNN Tanh',
+    vnn.r.tanh = 'VNN Tanh',
+    vnn.l.tanh = 'VNN Tanh LSUV',
+    vnn.l.relu = 'VNN Relu LSUV',
+    vnn.l.none = 'VLN LSUV') ))
+ggsave('paper_1mods_2trace_data_dme-ADHReplicates_hzg.svg', p, width = 30, height = 5, units = 'in')
+ggsave('paper_1mods_2trace_data_dme-ADHReplicates_hzg.png', p, width = 30, height = 5, units = 'in')
+
+
+p <- plt_net_metrics(md = md, phase_i = 'models', phno_i = 'phno_ProteinDry', show_min_loss = TRUE)
+p <- p+scale_y_continuous(
+        trans = "log10",
+        breaks = c(0.5, 1, 10, 100, 1000))+
+    labs(x = '', y = '')+
+  facet_grid(phno~init, labeller = labeller(
+  phno = c(phno_ProteinDry = "Protein Dry"),
+  init = c(
+    dnn.r.tanh = 'DNN Tanh',
+    vnn.r.tanh = 'VNN Tanh',
+    vnn.l.tanh = 'VNN Tanh LSUV',
+    vnn.l.relu = 'VNN Relu LSUV',
+    vnn.l.none = 'VLN LSUV') ))
+ggsave('paper_1mods_2trace_data_gmx-phno_ProteinDry.svg', p, width = 30, height = 5, units = 'in')
+ggsave('paper_1mods_2trace_data_gmx-phno_ProteinDry.png', p, width = 30, height = 5, units = 'in')
+
+
+p <- plt_net_metrics(md = md, phase_i = 'models', phno_i = 'phno_StachyoseDry', show_min_loss = TRUE)
+p <- p+scale_y_continuous(
+        trans = "log10",
+        breaks = c(0.5, 1, 10, 100, 1000))+
+    labs(x = '', y = '')+
+  facet_grid(phno~init, labeller = labeller(
+  phno = c(phno_StachyoseDry = "Stachyose Dry"),
+  init = c(
+    dnn.r.tanh = 'DNN Tanh',
+    vnn.r.tanh = 'VNN Tanh',
+    vnn.l.tanh = 'VNN Tanh LSUV',
+    vnn.l.relu = 'VNN Relu LSUV',
+    vnn.l.none = 'VLN LSUV') ))
+ggsave('paper_1mods_2trace_data_gmx-phno_StachyoseDry.svg', p, width = 30, height = 5, units = 'in')
+ggsave('paper_1mods_2trace_data_gmx-phno_StachyoseDry.png', p, width = 30, height = 5, units = 'in')
+
+
+p <- plt_net_metrics(md = md, phase_i = 'models', phno_i = 'phno_OilDry', show_min_loss = TRUE)
+p <- p+scale_y_continuous(
+        trans = "log10",
+        breaks = c(0.5, 1, 10, 100, 1000))+
+    labs(x = '', y = '')+
+  facet_grid(phno~init, labeller = labeller(
+  phno = c(phno_OilDry = "Oil Dry"),
+  init = c(
+    dnn.r.tanh = 'DNN Tanh',
+    vnn.r.tanh = 'VNN Tanh',
+    vnn.l.tanh = 'VNN Tanh LSUV',
+    vnn.l.relu = 'VNN Relu LSUV',
+    vnn.l.none = 'VLN LSUV') ))
+ggsave('paper_1mods_2trace_data_gmx-phno_OilDry.svg', p, width = 30, height = 5, units = 'in')
+ggsave('paper_1mods_2trace_data_gmx-phno_OilDry.png', p, width = 30, height = 5, units = 'in')
+
+
+p <- plt_net_metrics(md = md, phase_i = 'models', phno_i = 'phno_all_Pollen_GDD__FTaxaREnvRGxE', show_min_loss = TRUE)
+p <- p+scale_y_continuous(
+        trans = "log10",
+        breaks = c(0.5, 1, 10, 100, 1000))+
+    labs(x = '', y = '')+
+  facet_grid(phno~init, labeller = labeller(
+  phno = c(phno_all_Pollen_GDD__FTaxaREnvRGxE = "Pollen GDD Est."),
+  init = c(
+    dnn.r.tanh = 'DNN Tanh',
+    vnn.r.tanh = 'VNN Tanh',
+    vnn.l.tanh = 'VNN Tanh LSUV',
+    vnn.l.relu = 'VNN Relu LSUV',
+    vnn.l.none = 'VLN LSUV') ))
+ggsave('paper_1mods_2trace_data_zma-phno_all_Pollen_GDD__FTaxaREnvRGxE.svg', p, width = 30, height = 5, units = 'in')
+ggsave('paper_1mods_2trace_data_zma-phno_all_Pollen_GDD__FTaxaREnvRGxE.png', p, width = 30, height = 5, units = 'in')
+
+
+p <- plt_net_metrics(md = md, phase_i = 'models', phno_i = 'phno_all_Yield_Mg_ha', show_min_loss = TRUE)
+p <- p+scale_y_continuous(
+        trans = "log10",
+        breaks = c(0.5, 1, 10, 100, 1000))+
+    labs(x = '', y = '')+
+  facet_grid(phno~init, labeller = labeller(
+  phno = c(phno_all_Yield_Mg_ha = "Yield Mg per ha"),
+  init = c(
+    dnn.r.tanh = 'DNN Tanh',
+    vnn.r.tanh = 'VNN Tanh',
+    vnn.l.tanh = 'VNN Tanh LSUV',
+    vnn.l.relu = 'VNN Relu LSUV',
+    vnn.l.none = 'VLN LSUV') ))
+ggsave('paper_1mods_2trace_data_zma-phno_all_Yield_Mg_ha.svg', p, width = 30, height = 5, units = 'in')
+ggsave('paper_1mods_2trace_data_zma-phno_all_Yield_Mg_ha.png', p, width = 30, height = 5, units = 'in')
+
+
+p <- plt_net_metrics(md = md, phase_i = 'models', phno_i = 'phno_all_Yield_Mg_ha__FTaxaREnvRGxE', show_min_loss = TRUE)
+p <- p+scale_y_continuous(
+        trans = "log10",
+        breaks = c(0.5, 1, 10, 100, 1000))+
+    labs(x = '', y = '')+
+  facet_grid(phno~init, labeller = labeller(
+  phno = c(phno_all_Yield_Mg_ha__FTaxaREnvRGxE = "Yield Mg per ha Est."),
+  init = c(
+    dnn.r.tanh = 'DNN Tanh',
+    vnn.r.tanh = 'VNN Tanh',
+    vnn.l.tanh = 'VNN Tanh LSUV',
+    vnn.l.relu = 'VNN Relu LSUV',
+    vnn.l.none = 'VLN LSUV') ))
+ggsave('paper_1mods_2trace_data_zma-phno_all_Yield_Mg_ha__FTaxaREnvRGxE.svg', p, width = 30, height = 5, units = 'in')
+ggsave('paper_1mods_2trace_data_zma-phno_all_Yield_Mg_ha__FTaxaREnvRGxE.png', p, width = 30, height = 5, units = 'in')
+```
+
 
 ## [~] Err. Prediction
 
@@ -1283,7 +1608,7 @@ get_final_loss <- function(md, phno_i, phase_i = 'models'){
     distinct()
 
   
-  tmp_lm
+  # tmp_lm
   
   # FIXME - doesn't need a fix but should be aware of this
   # NOTE this is not going to be exactly the same as the error calculated from 
@@ -1319,84 +1644,243 @@ get_final_loss <- function(md, phno_i, phase_i = 'models'){
 }
 
 
-tmp_all <- get_final_loss(
-  md = md, 
-  phno_i = 'phno_all_Yield_Mg_ha__FTaxaREnvRGxE', 
-  phase_i = 'models'
-  )
-
-tmp_all <- tmp_all |> 
-  mutate(init = case_when(
-    init == "lin.none" ~ "BLUP",
-    init == "vnn.r.tanh" ~ "VNN Tanh",
-    init == "dnn.r.tanh" ~ "DNN Tanh",
-    init == "vnn.l.relu" ~ "VNN Relu LSUV",
-    init == "vnn.l.tanh" ~ "VNN Tanh LSUV",
-    init == "vnn.l.none" ~ "VLN LSUV"
-  )) |>
-  mutate(init = factor(
-    init, 
-    c("BLUP", "DNN Tanh", "VNN Tanh", "VNN Tanh LSUV", "VNN Relu LSUV", "VLN LSUV") 
-  ))
 
 
-
-tmp_all <- tmp_all |>
-  mutate(
-    split = case_when(
-      split == 'trn' ~ 'Train', 
-      split == 'val' ~ 'Validation'
-      )) 
-
-
-
-p_top <- tmp_all |> 
-  ggplot(aes(x = init, y = mse, fill = split))+
-  geom_boxplot()+
-  geom_point(position = position_dodge(width=0.751) )+
-  scale_fill_manual(values = c('cornflowerblue', 'orange') )+
-  labs(x = '', y = '')+
-  theme_minimal()+
-  theme(axis.text.x = element_blank())+
-  theme(legend.position = 'none')+
-  coord_cartesian(ylim = c(10, 4100))+
-  scale_y_log10()
-
-p_bot <- tmp_all |> 
-  ggplot(aes(x = init, y = mse, fill = split))+
-  geom_boxplot()+
-  geom_point(position = position_dodge(width=0.751) )+
-  scale_fill_manual(values = c('cornflowerblue', 'orange') )+
-  labs(x = '', y = 'MSE')+
-  theme_minimal()+
-  theme(legend.position = 'bottom')+
-  coord_cartesian(ylim = c(0, 1.5))
-  
-
-p_top / p_bot
-
-design <- "
-A
-B
-B
-B
-B
-"
-
-p <- (p_top + p_bot)+plot_layout(design = design)
-
-poster_1mods_3box <- p
-ggsave('poster_1mods_3box.svg', p, width = 30, height = 5, units = 'in')
+# tmp_all <- get_final_loss(
+#   md = md, 
+#   phno_i = 'phno_all_Yield_Mg_ha__FTaxaREnvRGxE', 
+#   phase_i = 'models'
+#   )
+# 
+# tmp_all <- tmp_all |> 
+#   mutate(init = case_when(
+#     init == "lin.none" ~ "BLUP",
+#     init == "vnn.r.tanh" ~ "VNN Tanh",
+#     init == "dnn.r.tanh" ~ "DNN Tanh",
+#     init == "vnn.l.relu" ~ "VNN Relu LSUV",
+#     init == "vnn.l.tanh" ~ "VNN Tanh LSUV",
+#     init == "vnn.l.none" ~ "VLN LSUV"
+#   )) |>
+#   mutate(init = factor(
+#     init, 
+#     c("BLUP", "DNN Tanh", "VNN Tanh", "VNN Tanh LSUV", "VNN Relu LSUV", "VLN LSUV") 
+#   ))
+# 
+# 
+# 
+# tmp_all <- tmp_all |>
+#   mutate(
+#     split = case_when(
+#       split == 'trn' ~ 'Train', 
+#       split == 'val' ~ 'Validation'
+#       )) 
+# 
+# 
+# 
+# p_top <- tmp_all |> 
+#   ggplot(aes(x = init, y = mse, fill = split))+
+#   geom_boxplot()+
+#   geom_point(position = position_dodge(width=0.751) )+
+#   scale_fill_manual(values = c('cornflowerblue', 'orange') )+
+#   labs(x = '', y = '')+
+#   theme_minimal()+
+#   theme(axis.text.x = element_blank())+
+#   theme(legend.position = 'none')+
+#   coord_cartesian(ylim = c(10, 4100))+
+#   scale_y_log10()
+# 
+# p_bot <- tmp_all |> 
+#   ggplot(aes(x = init, y = mse, fill = split))+
+#   geom_boxplot()+
+#   geom_point(position = position_dodge(width=0.751) )+
+#   scale_fill_manual(values = c('cornflowerblue', 'orange') )+
+#   labs(x = '', y = 'MSE')+
+#   theme_minimal()+
+#   theme(legend.position = 'bottom')+
+#   coord_cartesian(ylim = c(0, 1.5))
+#   
+# 
+# p_top / p_bot
+# 
+# design <- "
+# A
+# B
+# B
+# B
+# B
+# "
+# 
+# p <- (p_top + p_bot)+plot_layout(design = design)
+# 
+# poster_1mods_3box <- p
+# ggsave('poster_1mods_3box.svg', p, width = 30, height = 5, units = 'in')
 
 ```
 
 
-## [_] Predictions
+
+
+
+
+```{r}
+## fast extraction for paper
+
+#FIXME blup for `phno_all_Yield_Mg_ha` is running
+# xx <- xx[xx$phn != 'phno_all_Yield_Mg_ha', ]
+#FIXME
+
+
+all_tmp_alls <- map(xx$phn, function(e){
+  
+  tmp_all <- get_final_loss(
+    md = md, 
+    phno_i = e, 
+    phase_i = 'models'
+  )
+  
+  tmp_all <- tmp_all |> 
+    mutate(init = case_when(
+      init == "lin.none" ~ "BLUP",
+      init == "vnn.r.tanh" ~ "VNN Tanh",
+      init == "dnn.r.tanh" ~ "DNN Tanh",
+      init == "vnn.l.relu" ~ "VNN Relu LSUV",
+      init == "vnn.l.tanh" ~ "VNN Tanh LSUV",
+      init == "vnn.l.none" ~ "VLN LSUV"
+    )) |>
+    mutate(init = factor(
+      init, 
+      c("BLUP", "DNN Tanh", "VNN Tanh", "VNN Tanh LSUV", "VNN Relu LSUV", "VLN LSUV") 
+    ))
+  
+  tmp_all <- tmp_all |>
+    mutate(
+      split = case_when(
+        split == 'trn' ~ 'Train', 
+        split == 'val' ~ 'Validation'
+      )) 
+  return(tmp_all)
+})
+
+
+all_tmp_all_plts <- map(seq_along(all_tmp_alls), function(i){
+  tmp_all <- all_tmp_alls[[i]]
+  
+#   p_top <- tmp_all |>
+#     ggplot(aes(x = init, y = mse, fill = split))+
+#     geom_boxplot()+
+#     geom_point(position = position_dodge(width=0.751) )+
+#     scale_fill_manual(values = c('cornflowerblue', 'orange') )+
+#     labs(x = '', y = '')+
+#     theme_minimal()+
+#     theme(axis.text.x = element_blank())+
+#     theme(legend.position = 'none')+
+#     coord_cartesian(ylim = c(10, 4100))+
+#     scale_y_log10()
+#   
+#   p_bot <- tmp_all |>
+#     ggplot(aes(x = init, y = mse, fill = split))+
+#     geom_boxplot()+
+#     geom_point(position = position_dodge(width=0.751) )+
+#     scale_fill_manual(values = c('cornflowerblue', 'orange') )+
+#     labs(x = '', y = 'MSE')+
+#     theme_minimal()+
+#     theme(legend.position = 'bottom')+
+#     coord_cartesian(ylim = c(0, 1.5))
+#   
+#   design <- "
+# A
+# B
+# B
+# B
+# B
+# "
+#   p <- (p_top + p_bot)+plot_layout(design = design)
+  
+  tmp_best <- left_join(
+    (tmp_all |> 
+       group_by(data, phno, model, phase, split, init) |>
+       mutate(mse = min(median(mse))) |>
+       ungroup() |>
+       group_by(split) |>
+       summarize(mse = min(mse)) |>
+       ungroup() |>
+       distinct()
+     ),
+    (tmp_all |> 
+       group_by(data, phno, model, phase, split, init) |>
+       mutate(mse = min(median(mse))) |>
+       ungroup() |>
+       distinct()
+       ))
+  
+  # manually figure out the offset for the arrows
+  tmp_best <- tmp_best |>
+  mutate(init_num = as.numeric(tmp_best$init))  |>
+  mutate(init_num = case_when(
+    split == 'Train' ~ (init_num - (0.751/4)),
+    split != 'Train' ~ (init_num + (0.751/4))
+    ))  
+
+  
+  p <- tmp_all |>
+    ggplot(aes(x = init, y = mse, fill = split))+
+    geom_hline(
+      yintercept = as.numeric(select(filter(tmp_best, split == 'Train'), mse)), 
+      color = 'cornflowerblue', linetype = 'dashed'
+    )+
+    geom_hline(
+      yintercept = as.numeric(select(filter(tmp_best, split == 'Validation'), mse)),
+      color = 'orange', linetype = 'dashed'
+    )+
+    geom_boxplot()+
+    geom_segment(
+      data = tmp_best, 
+      aes(x = init_num, y = 0, xend = init_num, yend = mse, color = split),
+      arrow = arrow(length = unit(5, "pt"), type = "closed"),
+      # color = "orange",
+      linetype = 'solid'
+    )+
+    geom_point(position = position_dodge(width=0.751) )+
+    scale_fill_manual(values = c('cornflowerblue', 'orange') )+
+    scale_color_manual(values = c('cornflowerblue', 'orange') )+
+    labs(x = '', y = 'MSE')+
+    theme_minimal()+
+    theme(legend.position = 'bottom')+
+    scale_y_log10()
+  
+  return(p)
+})
+
+
+
+
+
+
+map(seq_along(all_tmp_alls), function(i){
+  kegg <- case_when(
+    xx$phn[i] %in% c("ADHReplicates_hzg") ~ 'dme',
+    xx$phn[i] %in% c("phno_ProteinDry", "phno_StachyoseDry", "phno_OilDry") ~ 'gmx',
+    xx$phn[i] %in% c("phno_all_Pollen_GDD__FTaxaREnvRGxE", "phno_all_Yield_Mg_ha__FTaxaREnvRGxE", "phno_all_Yield_Mg_ha") ~ 'zma'
+  )
+  p <- all_tmp_all_plts[[i]]
+  ggsave(paste0('paper_1mods_3box_data_', kegg,'-',xx$phn[i], '.svg'), p, width = 7, height = 7, units = 'in')
+  ggsave(paste0('paper_1mods_3box_data_', kegg,'-',xx$phn[i], '.png'), p, width = 7, height = 7, units = 'in')
+})
+
+
+
+```
+
+
+
+## [~] Predictions
 ```{r}
 ## New functions:
 
-
-pred_parquet_to_df <- function(paths = unlist(mdi[, 'path']), model_type = 'dnn'){
+pred_parquet_to_df <- function(
+    paths = unlist(mdi[, 'path']), 
+    infos = unlist(mdi[, 'info']),
+    model_type = 'dnn'){
   ## Turn output into a single table
   res_l <- map(paths, function(ij_path){ 
     read_parquet(ij_path) 
@@ -1408,7 +1892,7 @@ pred_parquet_to_df <- function(paths = unlist(mdi[, 'path']), model_type = 'dnn'
     e <- e |> mutate(join_this = TRUE)
     return(e)
   })
-  names(res_l) <- as.vector(unlist(mdi[, 'info']))
+  names(res_l) <- as.vector(infos)
   
   # BLUP output
   if(model_type == 'lin'){
@@ -1463,127 +1947,561 @@ full_join_list <- function(lst){
 ## Processing:
 
 
-# md
-phase_i = 'models' # always
-phno_i = 'phno_all_Pollen_GDD__FTaxaREnvRGxE'
-# show_min_loss
+# # md
+# phase_i = 'models' # always
+# phno_i = 'phno_all_Pollen_GDD__FTaxaREnvRGxE'
+# # show_min_loss
+# 
+# 
+# md1 <- md |>
+#   filter(
+#     phno == phno_i,
+#     phase == phase_i,
+#     # don't use model history or evaluation
+#     (stringr::str_detect(info, 'eval_', negate = T) & (info != 'metrics')) 
+#     ) |>
+#   select(-phno, -phase, -version)
+# 
+# # process each data:model:hash
+# # here are the blocks of files I need to opperate over.
+# md1_blocks <- md1 |> 
+#   select(model, data, hash) |> 
+#   distinct() |>
+#   mutate(model = factor(model, levels = c('lin', 'dnn', 'vnn'))) |>
+#   arrange(model, data, hash) |>
+#   mutate(model = as.character(model))
+# 
+# 
+# 
+# out_l <- list()
+# for(i in seq(1, nrow(md1_blocks))){
+#   mdi <- left_join(md1_blocks[i, ], md1)
+#   out <- cbind(
+#     md1_blocks[i, ],
+#     pred_parquet_to_df(
+#       paths = unlist(mdi[, 'path']), 
+#       model_type = unique(unlist(mdi[, 'model']))
+#     )
+#   )
+#   out_l[[(length(out_l)+1)]] <- out
+# }
+# 
+# out <- full_join_list(lst = out_l)
+# 
+# 
+# out <- out |> 
+#   mutate(
+#   split = case_when(
+#     split %in% c('train', 'Training') ~ 'trn', 
+#     split %in% c('test', 'Validation') ~ 'val' 
+#     )
+# )
+# 
+# 
+# 
+# 
+# # can I use the information in out to get a reasonable estimate of error for all?
+# 
+# out |>
+#   filter(
+#     model == 'lin',
+#     data == 'data_zma',
+#     hash == '186490dd78',
+#     split == 'val'
+#   ) |>
+#   summarise(mse = mean((obs - yhat)**2))
+#   
+# 
+# mse_summary_lin <- out |>
+#   filter(model == 'lin') |>
+#   mutate(SE = (obs - yhat)**2 ) |>
+#   group_by(model, data, hash, split) |>
+#   filter(!is.na(SE)) |>
+#   summarise(MSE = mean(SE))
+#   
+# 
+# out |>
+#   filter(
+#     model != 'lin',
+#     data == 'data_zma',
+#     # hash == '186490dd78',
+#     split == 'val'
+#   ) |> 
+#   # mutate(yhat_rmcs =( (yhat_cs * yvar_sd) + yvar_mu)) # sanity check worked :)
+#   mutate(obs_rmcs =( (obs_cs * yvar_sd) + yvar_mu))
+# 
+# 
+# p <- out |>
+#   mutate(init = case_when(
+#     interaction(model, data) == "lin.data_zma" ~ "BLUP",
+#     interaction(model, data) == "vnn.data_zma" ~ "VNN Tanh",
+#     interaction(model, data) == "dnn.data_zma" ~ "DNN Tanh",
+#     interaction(model, data) == "vnn.data_zma_lsuv_relu" ~ "VNN Relu LSUV",
+#     interaction(model, data) == "vnn.data_zma_lsuv_tanh" ~ "VNN Tanh LSUV",
+#     interaction(model, data) == "vnn.data_zma_lsuv_vlin" ~ "VLN LSUV"
+#   )) |>
+#   mutate(init = factor(
+#     init, 
+#     c("BLUP", "DNN Tanh", "VNN Tanh", "VNN Tanh LSUV", "VNN Relu LSUV", "VLN LSUV") 
+#   ))  |>
+#   mutate(
+#     split = case_when(
+#       split == 'trn' ~ 'Train', 
+#       split == 'val' ~ 'Validation'
+#       )) |>
+#   mutate(
+#     Observed = case_when(
+#       model == 'lin' ~   obs,
+#       model != 'lin' ~ ((obs_cs * yvar_sd)+yvar_mu),
+#     )
+#   ) |>
+#   ggplot(aes(Observed, yhat, color = split))+
+#   geom_point()+
+#   geom_smooth(color = 'black', method = 'lm')+
+#   geom_abline(slope = 1, intercept = 0, linetype = 'dashed')+
+#   facet_grid(split~init)+
+#   scale_color_manual(values = c('cornflowerblue', 'orange') )+
+#   theme_minimal()+
+#   theme(legend.position = 'bottom')
+# 
+# 
+# poster_1mods_4pts <- p
+# ggsave('poster_1mods_4pts.svg', p, width = 30, height = 5, units = 'in')
+```
 
 
-md1 <- md |>
-  filter(
-    phno == phno_i,
-    phase == phase_i,
-    # don't use model history or evaluation
-    (stringr::str_detect(info, 'eval_', negate = T) & (info != 'metrics')) 
+
+```{r}
+# scatterplot figures
+
+tmp_fn <- function(
+    md = md, 
+    phase_i = 'models', 
+    phno_i = 'phno_all_Pollen_GDD__FTaxaREnvRGxE'){
+  
+  md1 <- md |>
+    filter(
+      phno == phno_i,
+      phase == phase_i,
+      # don't use model history or evaluation
+      (stringr::str_detect(info, 'eval_', negate = T) & (info != 'metrics')) 
     ) |>
-  select(-phno, -phase, -version)
+    select(-phno, -phase, -version)
+  
+  
+  # ensure this is only parquet files
+  md1 <- md1[str_detect(md1$path, '.parquet$'), ]
+  
+  # process each data:model:hash
+  # here are the blocks of files I need to opperate over.
+  md1_blocks <- md1 |> 
+    select(model, data, hash) |> 
+    distinct() |>
+    mutate(model = factor(model, levels = c('lin', 'dnn', 'vnn'))) |>
+    arrange(model, data, hash) |>
+    mutate(model = as.character(model))
+  
 
-# process each data:model:hash
-# here are the blocks of files I need to opperate over.
-md1_blocks <- md1 |> 
-  select(model, data, hash) |> 
-  distinct() |>
-  mutate(model = factor(model, levels = c('lin', 'dnn', 'vnn'))) |>
-  arrange(model, data, hash) |>
-  mutate(model = as.character(model))
-
-
-
-out_l <- list()
-for(i in seq(1, nrow(md1_blocks))){
-  mdi <- left_join(md1_blocks[i, ], md1)
-  out <- cbind(
-    md1_blocks[i, ],
-    pred_parquet_to_df(
-      paths = unlist(mdi[, 'path']), 
-      model_type = unique(unlist(mdi[, 'model']))
+  
+  out_l <- list()
+  for(i in seq(1, nrow(md1_blocks))){
+    mdi <- left_join(md1_blocks[i, ], md1)
+    out <- cbind(
+      md1_blocks[i, ],
+      pred_parquet_to_df(
+        paths = unlist(mdi[, 'path']), 
+        infos = unlist(mdi[, 'info']),
+        model_type = unique(unlist(mdi[, 'model']))
+      )
     )
+    out_l[[(length(out_l)+1)]] <- out
+  }
+  
+  out <- full_join_list(lst = out_l)
+  
+  
+  out <- out |> 
+    mutate(
+      split = case_when(
+        split %in% c('train', 'Training') ~ 'trn', 
+        split %in% c('test', 'Validation') ~ 'val' 
+      )
+    )
+  
+  
+  # can I use the information in out to get a reasonable estimate of error for all?
+  # mse_summary_lin <- out |>
+  #   filter(model == 'lin') |>
+  #   mutate(SE = (obs - yhat)**2 ) |>
+  #   group_by(model, data, hash, split) |>
+  #   filter(!is.na(SE)) |>
+  #   summarise(MSE = mean(SE))
+  
+  
+  tmp <- unique(out$data)
+  data_kegg =  tmp[str_detect(tmp, 'data_\\D{3}$')]
+
+  p <- out |>
+    mutate(init = case_when(
+      interaction(model, data) == paste0("lin.", data_kegg) ~ "BLUP",
+      interaction(model, data) == paste0("vnn.", data_kegg) ~ "VNN Tanh",
+      interaction(model, data) == paste0("dnn.", data_kegg) ~ "DNN Tanh",
+      interaction(model, data) == paste0("vnn.", data_kegg, "_lsuv_relu") ~ "VNN Relu LSUV",
+      interaction(model, data) == paste0("vnn.", data_kegg, "_lsuv_tanh") ~ "VNN Tanh LSUV",
+      interaction(model, data) == paste0("vnn.", data_kegg, "_lsuv_vlin") ~ "VLN LSUV"
+    )) |>
+    mutate(init = factor(
+      init, 
+      c("BLUP", "DNN Tanh", "VNN Tanh", "VNN Tanh LSUV", "VNN Relu LSUV", "VLN LSUV") 
+    ))  |>
+    mutate(
+      split = case_when(
+        split == 'trn' ~ 'Train', 
+        split == 'val' ~ 'Validation'
+      )) |>
+    mutate(
+      Observed = case_when(
+        model == 'lin' ~   obs,
+        model != 'lin' ~ ((obs_cs * yvar_sd)+yvar_mu),
+      )
+    ) |>
+    ggplot(aes(Observed, yhat, color = split))+
+    geom_point()+
+    geom_smooth(color = 'black', method = 'lm')+
+    geom_abline(slope = 1, intercept = 0, linetype = 'dashed')+
+    facet_grid(split~init)+
+    scale_color_manual(values = c('cornflowerblue', 'orange') )+
+    theme_minimal()+
+    theme(legend.position = 'bottom')
+  
+  return(p)
+} 
+
+
+
+# all fail but 
+# "phno_all_Pollen_GDD__FTaxaREnvRGxE"
+# "phno_all_Yield_Mg_ha__FTaxaREnvRGxE"
+# the ones that fail have the same error:
+# 
+# Error in `map()`:
+# ℹ In index: 1.
+# Caused by error in `map()`:
+# ℹ In index: 1.
+# ℹ With name: path.
+# Caused by error:
+# ! Invalid: Parquet magic bytes not found in footer. Either the file is corrupted or this is not a parquet file.
+
+
+map(xx$phn, function(e){
+  kegg <- case_when(
+    e %in% c("ADHReplicates_hzg") ~ 'dme',
+    e %in% c("phno_ProteinDry", "phno_StachyoseDry", "phno_OilDry") ~ 'gmx',
+    e %in% c("phno_all_Pollen_GDD__FTaxaREnvRGxE", "phno_all_Yield_Mg_ha__FTaxaREnvRGxE", "phno_all_Yield_Mg_ha") ~ 'zma'
   )
-  out_l[[(length(out_l)+1)]] <- out
+  p <- tmp_fn(md = md, phase_i = 'models', phno_i = e)+theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  
+  ggsave(paste0('paper_1mods_4pts_data_', kegg,'-',e, '.svg'), p, width = 7, height = 7, units = 'in')
+  ggsave(paste0('paper_1mods_4pts_data_', kegg,'-',e, '.png'), p, width = 7, height = 7, units = 'in')
+  
+  p <- p+facet_wrap(split~init, scales = "free", nrow = 2)  
+  ggsave(paste0('paper_1mods_4pts_data_', kegg,'-',e, '_scalefree.svg'), p, width = 7, height = 7, units = 'in')
+  ggsave(paste0('paper_1mods_4pts_data_', kegg,'-',e, '_scalefree.png'), p, width = 7, height = 7, units = 'in')
+  
+})
+
+
+```
+
+
+```{r}
+
+# Plot correlations
+
+tmp_fn <- function(
+    md = md,
+    phase_i = 'models',
+    phno_i = 'phno_all_Pollen_GDD__FTaxaREnvRGxE'){
+  
+  md1 <- md |>
+    filter(
+      phno == phno_i,
+      phase == phase_i,
+      # don't use model history or evaluation
+      (stringr::str_detect(info, 'eval_', negate = T) & (info != 'metrics')) 
+    ) |>
+    select(-phno, -phase, -version)
+  
+  
+  # ensure this is only parquet files
+  md1 <- md1[str_detect(md1$path, '.parquet$'), ]
+  
+  # process each data:model:hash
+  # here are the blocks of files I need to opperate over.
+  md1_blocks <- md1 |> 
+    select(model, data, hash) |> 
+    distinct() |>
+    mutate(model = factor(model, levels = c('lin', 'dnn', 'vnn'))) |>
+    arrange(model, data, hash) |>
+    mutate(model = as.character(model))
+  
+  
+  
+  out_l <- list()
+  for(i in seq(1, nrow(md1_blocks))){
+    mdi <- left_join(md1_blocks[i, ], md1)
+    out <- cbind(
+      md1_blocks[i, ],
+      pred_parquet_to_df(
+        paths = unlist(mdi[, 'path']), 
+        infos = unlist(mdi[, 'info']),
+        model_type = unique(unlist(mdi[, 'model']))
+      )
+    )
+    out_l[[(length(out_l)+1)]] <- out
+  }
+  
+  out <- full_join_list(lst = out_l)
+  
+  
+  out <- out |> 
+    mutate(
+      split = case_when(
+        split %in% c('train', 'Training') ~ 'trn', 
+        split %in% c('test', 'Validation') ~ 'val' 
+      )
+    )
+  
+  tmp <- unique(out$data)
+  data_kegg =  tmp[str_detect(tmp, 'data_\\D{3}$')]
+  
+  out <- out |>
+    mutate(init = case_when(
+      interaction(model, data) == paste0("lin.", data_kegg) ~ "BLUP",
+      interaction(model, data) == paste0("vnn.", data_kegg) ~ "VNN Tanh",
+      interaction(model, data) == paste0("dnn.", data_kegg) ~ "DNN Tanh",
+      interaction(model, data) == paste0("vnn.", data_kegg, "_lsuv_relu") ~ "VNN Relu LSUV",
+      interaction(model, data) == paste0("vnn.", data_kegg, "_lsuv_tanh") ~ "VNN Tanh LSUV",
+      interaction(model, data) == paste0("vnn.", data_kegg, "_lsuv_vlin") ~ "VLN LSUV"
+    )) |>
+    mutate(init = factor(
+      init, 
+      c("BLUP", "DNN Tanh", "VNN Tanh", "VNN Tanh LSUV", "VNN Relu LSUV", "VLN LSUV") 
+    ))  |>
+    mutate(
+      split = case_when(
+        split == 'trn' ~ 'Train', 
+        split == 'val' ~ 'Validation'
+      )) |>
+    mutate(
+      Observed = case_when(
+        model == 'lin' ~   obs,
+        model != 'lin' ~ ((obs_cs * yvar_sd)+yvar_mu),
+      )
+    ) |> 
+    group_by(init, model, data, hash, split) |>
+    summarise(
+      pearson = cor(Observed, yhat, method = 'pearson'),
+      spearman = cor(Observed, yhat, method = 'spearman'),
+      MSE = mean((Observed - yhat)**2)
+    )
+  
+  return(out)
 }
 
-out <- full_join_list(lst = out_l)
-
-
-out <- out |> 
-  mutate(
-  split = case_when(
-    split %in% c('train', 'Training') ~ 'trn', 
-    split %in% c('test', 'Validation') ~ 'val' 
-    )
-)
-
-
-
-
-# can I use the information in out to get a reasonable estimate of error for all?
-
-out |>
-  filter(
-    model == 'lin',
-    data == 'data_zma',
-    hash == '186490dd78',
-    split == 'val'
-  ) |>
-  summarise(mse = mean((obs - yhat)**2))
+tmp_fn2 <- function(out){
+  ##  Pearson ====
   
-
-mse_summary_lin <- out |>
-  filter(model == 'lin') |>
-  mutate(SE = (obs - yhat)**2 ) |>
-  group_by(model, data, hash, split) |>
-  filter(!is.na(SE)) |>
-  summarise(MSE = mean(SE))
+  tmp_best <- left_join(
+    (out |> 
+       group_by(data, model, split, init) |>
+       mutate(pearson = max(median(pearson))) |>
+       ungroup() |>
+       group_by(split) |>
+       summarize(pearson = max(pearson)) |>
+       ungroup() |>
+       distinct()
+    ),
+    (out |> 
+       group_by(data, model, split, init) |>
+       mutate(pearson = max(median(pearson))) |>
+       ungroup() |>
+       distinct()
+    ))
   
+  tmp_best <- tmp_best  |>
+    mutate(init_num = as.numeric(tmp_best$init))  |>
+    mutate(init_num = case_when(
+      split == 'Train' ~ (init_num - (0.751/4)),
+      split != 'Train' ~ (init_num + (0.751/4))
+    ))  
+  
+  
+  p1 <- out |>
+    ggplot(aes(x = init, y = pearson, fill = split))+
+    geom_hline(
+      yintercept = as.numeric(select(filter(tmp_best, split == 'Train'), pearson)[[1]][1]), # indexing here ensures that we have a single value in the case of ties
+      color = 'cornflowerblue', linetype = 'dashed'
+    )+
+    geom_hline(
+      yintercept = as.numeric(select(filter(tmp_best, split == 'Validation'), pearson)[[1]][1]),
+      color = 'orange', linetype = 'dashed'
+    )+
+    geom_boxplot()+
+    geom_segment(
+      data = tmp_best, 
+      aes(x = init_num, y = 1, xend = init_num, yend = pearson, color = split),
+      arrow = arrow(length = unit(5, "pt"), type = "closed"),
+      # color = "orange",
+      linetype = 'solid'
+    )+
+    geom_point(position = position_dodge(width=0.751) )+
+    scale_fill_manual(values = c('cornflowerblue', 'orange') )+
+    scale_color_manual(values = c('cornflowerblue', 'orange') )+
+    labs(x = '', y = 'Pearson r')+
+    theme_minimal()+
+    theme(legend.position = 'bottom')
+  
+  ## Spearman ====
+  
+  tmp_best <- left_join(
+    (out |> 
+       select(-pearson) |>
+       group_by(data, model, split, init) |>
+       mutate(spearman = max(median(spearman))) |>
+       ungroup() |>
+       group_by(split) |>
+       summarize(spearman = max(spearman)) |>
+       ungroup() |>
+       distinct()
+    ),
+    (out |> 
+       select(-pearson) |>
+       group_by(data, model, split, init) |>
+       mutate(spearman = max(median(spearman))) |>
+       ungroup() |>
+       distinct()
+    ))
+  
+  tmp_best <- tmp_best  |>
+    mutate(init_num = as.numeric(tmp_best$init))  |>
+    mutate(init_num = case_when(
+      split == 'Train' ~ (init_num - (0.751/4)),
+      split != 'Train' ~ (init_num + (0.751/4))
+    ))  
+  
+  
+  p2 <- out |>
+    ggplot(aes(x = init, y = spearman, fill = split))+
+    geom_hline(
+      yintercept = as.numeric(select(filter(tmp_best, split == 'Train'), spearman)[[1]][1]), 
+      color = 'cornflowerblue', linetype = 'dashed'
+    )+
+    geom_hline(
+      yintercept = as.numeric(select(filter(tmp_best, split == 'Validation'), spearman)[[1]][1]),
+      color = 'orange', linetype = 'dashed'
+    )+
+    geom_boxplot()+
+    geom_segment(
+      data = tmp_best, 
+      aes(x = init_num, y = 1, xend = init_num, yend = spearman, color = split),
+      arrow = arrow(length = unit(5, "pt"), type = "closed"),
+      linetype = 'solid'
+    )+
+    geom_point(position = position_dodge(width=0.751) )+
+    scale_fill_manual(values = c('cornflowerblue', 'orange') )+
+    scale_color_manual(values = c('cornflowerblue', 'orange') )+
+    labs(x = '', y = 'Spearman ρ')+
+    theme_minimal()+
+    theme(legend.position = 'bottom')
+  
+  
+  return(list(p1, p2))
+}
 
-out |>
-  filter(
-    model != 'lin',
-    data == 'data_zma',
-    # hash == '186490dd78',
-    split == 'val'
-  ) |> 
-  # mutate(yhat_rmcs =( (yhat_cs * yvar_sd) + yvar_mu)) # sanity check worked :)
-  mutate(obs_rmcs =( (obs_cs * yvar_sd) + yvar_mu))
+
+# out = tmp_fn(md = md, phase_i = 'models', phno_i = xx$phn[3])
+# (out |> 
+#     group_by(init, model, data, split) |>
+#        summarise(
+#          pearson  = mean(pearson),
+#          spearman = mean(spearman),
+#          MSE      = mean(MSE)
+#   ) |>
+#   pivot_wider(
+#     id_cols = c('init', 'model', 'data'),
+#     names_from = split,
+#     values_from = c('pearson', 'spearman', 'MSE')
+#   ))
+
+# tmp_fn(
+#     md = md,
+#     phase_i = 'models',
+#     phno_i = 'phno_all_Pollen_GDD__FTaxaREnvRGxE')
 
 
-p <- out |>
-  mutate(init = case_when(
-    interaction(model, data) == "lin.data_zma" ~ "BLUP",
-    interaction(model, data) == "vnn.data_zma" ~ "VNN Tanh",
-    interaction(model, data) == "dnn.data_zma" ~ "DNN Tanh",
-    interaction(model, data) == "vnn.data_zma_lsuv_relu" ~ "VNN Relu LSUV",
-    interaction(model, data) == "vnn.data_zma_lsuv_tanh" ~ "VNN Tanh LSUV",
-    interaction(model, data) == "vnn.data_zma_lsuv_vlin" ~ "VLN LSUV"
-  )) |>
-  mutate(init = factor(
-    init, 
-    c("BLUP", "DNN Tanh", "VNN Tanh", "VNN Tanh LSUV", "VNN Relu LSUV", "VLN LSUV") 
-  ))  |>
-  mutate(
-    split = case_when(
-      split == 'trn' ~ 'Train', 
-      split == 'val' ~ 'Validation'
-      )) |>
-  mutate(
-    Observed = case_when(
-      model == 'lin' ~   obs,
-      model != 'lin' ~ ((obs_cs * yvar_sd)+yvar_mu),
-    )
-  ) |>
-  ggplot(aes(Observed, yhat, color = split))+
-  geom_point()+
-  geom_smooth(color = 'black', method = 'lm')+
-  geom_abline(slope = 1, intercept = 0, linetype = 'dashed')+
-  facet_grid(split~init)+
-  scale_color_manual(values = c('cornflowerblue', 'orange') )+
-  theme_minimal()+
-  theme(legend.position = 'bottom')
+map(xx$phn, function(e){
+  kegg <- case_when(
+    e %in% c("ADHReplicates_hzg") ~ 'dme',
+    e %in% c("phno_ProteinDry", "phno_StachyoseDry", "phno_OilDry") ~ 'gmx',
+    e %in% c("phno_all_Pollen_GDD__FTaxaREnvRGxE", "phno_all_Yield_Mg_ha__FTaxaREnvRGxE", "phno_all_Yield_Mg_ha") ~ 'zma'
+  )
+  print(e)
+  out <- tmp_fn(md = md, phase_i = 'models', phno_i = e)
+  # summarize
+  out_sum1 <- (
+    out |>
+      group_by(init, model, data, split) |>
+      summarise(
+        pearson  = mean(pearson),
+        spearman = mean(spearman),
+        MSE      = mean(MSE)
+      ) |>
+      ungroup()
+  )
+  out_sum2 <- (
+    out_sum1 |>
+      pivot_wider(
+        id_cols = c('init', 'model', 'data'),
+        names_from = split,
+        values_from = c('pearson', 'spearman', 'MSE')
+      ))
+  
+  write.csv(
+    out_sum1,
+    file = paste0('paper_1mods_7sumlong_', kegg,'-',e, '.csv')
+  )  
+  
+  write.csv(
+    out_sum2,
+    file = paste0('paper_1mods_8sumwide_', kegg,'-',e, '.csv')
+  )  
+
+  # plot 
+  p <- tmp_fn2(out)
+  
+  ggsave(paste0('paper_1mods_5cor_data_', kegg,'-',e, '.svg'), p[[1]], width = 7, height = 7, units = 'in')
+  ggsave(paste0('paper_1mods_5cor_data_', kegg,'-',e, '.png'), p[[1]], width = 7, height = 7, units = 'in')
+  
+  ggsave(paste0('paper_1mods_6rho_data_', kegg,'-',e, '.svg'), p[[2]], width = 7, height = 7, units = 'in')
+  ggsave(paste0('paper_1mods_6rho_data_', kegg,'-',e, '.png'), p[[2]], width = 7, height = 7, units = 'in')
+  
+})
 
 
-poster_1mods_4pts <- p
-ggsave('poster_1mods_4pts.svg', p, width = 30, height = 5, units = 'in')
+
+
+
+
+
 ```
+
+
+```{r}
+stop here
+```
+
+
 
 
 ```{r}
